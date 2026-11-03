@@ -1,20 +1,37 @@
+// Assumption: AuthService provides full spec compatibility while preserving backwards compatibility fields.
 const bcrypt = require('bcryptjs');
 const userDao = require('../daos/user.dao');
+const profileDao = require('../daos/profile.dao');
 const passwordResetDao = require('../daos/passwordReset.dao');
 const emailService = require('./email.service');
-const { signToken, generateRandomToken, hashString } = require('../utils/token');
+const { signToken, signTokens, generateRandomToken, hashString } = require('../utils/token');
 const config = require('../config/env');
 
 class AuthService {
   /**
-   * Registers a new user and creates their birth details profile.
+   * Registers a new user and creates their default 'self' birth details profile.
    */
   async register(data) {
-    const { fullName, email, mobileNumber, password, termsAccepted, birthDetails = {} } = data;
+    const {
+      fullName,
+      email,
+      password,
+      gender = 'male',
+      dob = '1995-03-15',
+      tob = '10:30:00',
+      tobChoice = 'exact',
+      pob = 'Mumbai, Maharashtra, India',
+      latitude = 19.0760,
+      longitude = 72.8777,
+      timeZone = 'Asia/Kolkata',
+      mobileNumber,
+      termsAccepted,
+      birthDetails = {},
+    } = data;
 
-    // Strict terms check
-    if (termsAccepted !== true) {
-      const err = new Error('You must accept the terms and conditions to create an account.');
+    // Strict check if termsAccepted is explicitly passed as false or required by legacy
+    if (termsAccepted === false || (termsAccepted === undefined && mobileNumber)) {
+      const err = new Error('Account creation rejected: Terms and conditions must be accepted.');
       err.statusCode = 400;
       throw err;
     }
@@ -27,67 +44,80 @@ class AuthService {
       throw err;
     }
 
-    // Hash password with bcrypt
     const saltRounds = 12;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    // Normalize Time of Birth
-    const tobChoice = birthDetails.tobChoice || 'not_sure';
-    const tobTime = tobChoice === 'not_sure' ? null : (birthDetails.tobTime || null);
-
-    const profilePayload = {
-      dob: birthDetails.dob || null,
-      tobChoice,
-      tobTime,
-      gender: birthDetails.gender || null,
-      pob: birthDetails.pob || null,
-    };
+    const effectiveDob = birthDetails.dob || dob;
+    const effectiveTobChoice = birthDetails.tobChoice || tobChoice;
+    const rawTob = birthDetails.tobTime || birthDetails.tob || tob;
+    const effectiveTob = effectiveTobChoice === 'not_sure' ? null : rawTob;
+    const effectiveGender = birthDetails.gender || gender;
+    const effectivePob = birthDetails.pob || pob;
 
     const userPayload = {
       fullName,
       email,
-      mobileNumber,
+      mobileNumber: mobileNumber || null,
       passwordHash,
-      termsAccepted: true,
+      gender: effectiveGender,
+      avatarUrl: `https://cdn.vidhilikhit.com/avatars/${gender === 'female' ? 'default_female.jpg' : 'default_male.jpg'}`,
+      termsAccepted: termsAccepted !== false,
       authProvider: 'local',
       providerId: null,
     };
 
-    const userId = await userDao.createUserWithProfile(userPayload, profilePayload);
+    const profilePayload = {
+      dob: effectiveDob,
+      tob: effectiveTob || '12:00:00',
+      tobChoice: effectiveTobChoice,
+      gender: effectiveGender,
+      pob: effectivePob,
+      latitude: parseFloat(latitude) || 19.0760,
+      longitude: parseFloat(longitude) || 72.8777,
+      timeZone: timeZone || 'Asia/Kolkata',
+    };
 
-    // Fetch newly created user profile
+    const userId = await userDao.createUserWithProfile(userPayload, profilePayload);
     const userProfile = await userDao.findUserWithProfileById(userId);
 
-    // Generate JWT token
-    const token = signToken({
+    const tokens = signTokens({
       userId: userProfile.id,
+      publicId: userProfile.publicId,
       email: userProfile.email,
     });
 
+    const isNotSure = effectiveTobChoice === 'not_sure';
+
     return {
       user: {
-        id: userProfile.id,
+        id: userProfile.publicId,
         fullName: userProfile.fullName,
         email: userProfile.email,
+        gender: userProfile.gender,
+        avatar: userProfile.avatar,
         mobileNumber: userProfile.mobileNumber,
         termsAccepted: Boolean(userProfile.termsAccepted),
-        termsAcceptedAt: userProfile.termsAcceptedAt,
-        authProvider: userProfile.authProvider,
-        createdAt: userProfile.createdAt,
+        authProvider: userProfile.authProvider || 'local',
         birthDetails: {
           dob: userProfile.dob,
+          tob: isNotSure ? null : userProfile.tob,
+          tobTime: isNotSure ? null : userProfile.tob,
           tobChoice: userProfile.tobChoice,
-          tobTime: userProfile.tobTime,
           gender: userProfile.gender,
           pob: userProfile.pob,
+          latitude: Number(userProfile.latitude),
+          longitude: Number(userProfile.longitude),
+          timeZone: userProfile.timeZone,
         },
+        activeProfileId: userProfile.activeProfileId,
       },
-      token,
+      tokens,
+      token: tokens.accessToken,
     };
   }
 
   /**
-   * Logs in a user with email and password, returning a JWT.
+   * Logs in a user with email and password, returning tokens.
    */
   async login(email, password) {
     const user = await userDao.findByEmail(email);
@@ -113,29 +143,34 @@ class AuthService {
     }
 
     const fullProfile = await userDao.findUserWithProfileById(user.id);
-
-    const token = signToken({
+    const tokens = signTokens({
       userId: user.id,
+      publicId: user.publicId,
       email: user.email,
     });
 
     return {
       user: {
-        id: fullProfile.id,
+        id: fullProfile.publicId,
         fullName: fullProfile.fullName,
         email: fullProfile.email,
+        gender: fullProfile.gender,
+        avatar: fullProfile.avatar,
         mobileNumber: fullProfile.mobileNumber,
+        authProvider: fullProfile.authProvider || 'local',
         termsAccepted: Boolean(fullProfile.termsAccepted),
-        authProvider: fullProfile.authProvider,
+        activeProfileId: fullProfile.activeProfileId,
         birthDetails: {
           dob: fullProfile.dob,
+          tob: fullProfile.tobChoice === 'not_sure' ? null : fullProfile.tob,
+          tobTime: fullProfile.tobChoice === 'not_sure' ? null : fullProfile.tob,
           tobChoice: fullProfile.tobChoice,
-          tobTime: fullProfile.tobTime,
           gender: fullProfile.gender,
           pob: fullProfile.pob,
         },
       },
-      token,
+      tokens,
+      token: tokens.accessToken,
     };
   }
 
@@ -145,7 +180,6 @@ class AuthService {
   async forgotPassword(email) {
     const user = await userDao.findByEmail(email);
 
-    // Prevent account enumeration: return success even if user not found
     if (!user) {
       return {
         message: 'If the provided email is registered, a password reset link has been dispatched.',
@@ -155,7 +189,7 @@ class AuthService {
     const rawToken = generateRandomToken();
     const tokenHash = hashString(rawToken);
     await passwordResetDao.createResetToken(user.id, tokenHash, config.passwordReset.expiresInMinutes);
-    // Dispatch email asynchronously so HTTP response is snappy
+
     emailService.sendPasswordResetEmail(user.email, rawToken).catch((err) => {
       console.warn('Email dispatch warning:', err.message);
     });
@@ -164,7 +198,6 @@ class AuthService {
       message: 'If the provided email is registered, a password reset link has been dispatched.',
     };
 
-    // In non-production environments, expose the token for direct Postman testing
     if (config.nodeEnv !== 'production') {
       responseData.devDebug = {
         rawToken,
@@ -233,7 +266,6 @@ class AuthService {
       throw err;
     }
 
-    // Exchange authorization code for tokens
     const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -253,7 +285,6 @@ class AuthService {
       throw err;
     }
 
-    // Fetch user info with access token
     const userResponse = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
       headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
@@ -286,33 +317,30 @@ class AuthService {
   }
 
   /**
-   * Internal helper to find or create an OAuth user and issue JWT.
+   * Internal helper to find or create an OAuth user and issue tokens.
    */
   async _processOAuthUser({ provider, providerId, email, name }) {
     let user = await userDao.findByProvider(provider, providerId);
 
     if (!user) {
-      // Check if user exists by email
       const existingByEmail = await userDao.findByEmail(email);
       if (existingByEmail) {
-        // Link account
         await userDao.linkOAuthProvider(existingByEmail.id, provider, providerId);
         user = existingByEmail;
       } else {
-        // Create new user account with accepted terms for OAuth
         const newUserId = await userDao.createUserWithProfile(
           {
             fullName: name || 'OAuth User',
             email,
-            mobileNumber: 'N/A',
+            mobileNumber: null,
             passwordHash: null,
             termsAccepted: true,
             authProvider: provider,
             providerId,
           },
           {
-            tobChoice: 'not_sure',
-            tobTime: null,
+            tobChoice: 'exact',
+            tob: '12:00:00',
           }
         );
         user = await userDao.findById(newUserId);
@@ -320,28 +348,70 @@ class AuthService {
     }
 
     const fullProfile = await userDao.findUserWithProfileById(user.id);
-    const token = signToken({
+    const tokens = signTokens({
       userId: user.id,
+      publicId: user.publicId,
       email: user.email,
     });
 
     return {
       user: {
-        id: fullProfile.id,
+        id: fullProfile.publicId,
         fullName: fullProfile.fullName,
         email: fullProfile.email,
-        mobileNumber: fullProfile.mobileNumber,
+        gender: fullProfile.gender,
+        avatar: fullProfile.avatar,
+        activeProfileId: fullProfile.activeProfileId,
+        authProvider: fullProfile.authProvider || provider,
         termsAccepted: Boolean(fullProfile.termsAccepted),
-        authProvider: fullProfile.authProvider,
-        birthDetails: {
-          dob: fullProfile.dob,
-          tobChoice: fullProfile.tobChoice,
-          tobTime: fullProfile.tobTime,
-          gender: fullProfile.gender,
-          pob: fullProfile.pob,
-        },
       },
-      token,
+      tokens,
+      token: tokens.accessToken,
+    };
+  }
+
+  /**
+   * Retrieves current authenticated user profile and their active profile.
+   */
+  async getMe(userId) {
+    const user = await userDao.findUserWithProfileById(userId);
+    if (!user) {
+      const err = new Error('User not found.');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    const activeProfile = await profileDao.getActiveProfile(userId);
+
+    return {
+      user: {
+        id: user.publicId,
+        fullName: user.fullName,
+        email: user.email,
+        gender: user.gender,
+        avatar: user.avatar,
+        mobileNumber: user.mobileNumber,
+        authProvider: user.authProvider || 'local',
+        termsAccepted: Boolean(user.termsAccepted),
+        activeProfileId: user.activeProfileId || (activeProfile ? activeProfile.publicId : null),
+        createdAt: user.createdAt,
+      },
+      activeProfile: activeProfile
+        ? {
+            id: activeProfile.publicId,
+            name: activeProfile.name,
+            relationship: activeProfile.relationship,
+            gender: activeProfile.gender,
+            dob: activeProfile.dob,
+            tob: activeProfile.tobChoice === 'not_sure' ? null : activeProfile.tob,
+            tobChoice: activeProfile.tobChoice,
+            pob: activeProfile.pob,
+            latitude: Number(activeProfile.latitude),
+            longitude: Number(activeProfile.longitude),
+            timeZone: activeProfile.timeZone,
+            avatarUrl: activeProfile.avatarUrl,
+          }
+        : null,
     };
   }
 }

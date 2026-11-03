@@ -1,6 +1,7 @@
 const express = require('express');
 const authController = require('../controllers/auth.controller');
 const validate = require('../middlewares/validate.middleware');
+const authenticate = require('../middlewares/auth.middleware');
 const {
   registerSchema,
   loginSchema,
@@ -58,6 +59,13 @@ router.get('/oauth/google/callback', authController.googleCallback);
  * @access  Public
  */
 router.post('/oauth/google/token', authController.googleTokenAuth);
+
+/**
+ * @route   GET /api/v1/auth/me
+ * @desc    Fetch authenticated user details and active profile
+ * @access  Private (Requires Bearer Token)
+ */
+router.get('/me', authenticate, authController.getMe);
 
 module.exports = router;
 

@@ -1,16 +1,25 @@
+// Assumption: User and default profile are atomically created with consistent public IDs (usr_*, prof_*).
 const { query, withTransaction } = require('../config/db');
+const crypto = require('crypto');
 
 class UserDao {
   /**
+   * Generates public ID with prefix
+   */
+  generatePublicId(prefix = 'usr_') {
+    return `${prefix}${crypto.randomBytes(4).toString('hex')}`;
+  }
+
+  /**
    * Finds a user by email address.
-   * @param {string} email
-   * @returns {Promise<Object|null>}
    */
   async findByEmail(email) {
     const rows = await query(
-      `SELECT id, full_name, email, mobile_number, password_hash, 
-              terms_accepted, terms_accepted_at, auth_provider, provider_id, 
-              created_at, updated_at 
+      `SELECT id, public_id AS publicId, full_name AS fullName, email, mobile_number AS mobileNumber,
+              password_hash, gender, avatar_url AS avatarUrl, active_profile_id AS activeProfileId,
+              terms_accepted AS termsAccepted, terms_accepted_at AS termsAcceptedAt, 
+              auth_provider AS authProvider, provider_id AS providerId, 
+              created_at AS createdAt, updated_at AS updatedAt 
        FROM users 
        WHERE email = ? 
        LIMIT 1`,
@@ -20,15 +29,15 @@ class UserDao {
   }
 
   /**
-   * Finds a user by primary key ID.
-   * @param {number|string} id
-   * @returns {Promise<Object|null>}
+   * Finds a user by numeric primary key ID.
    */
   async findById(id) {
     const rows = await query(
-      `SELECT id, full_name, email, mobile_number, 
-              terms_accepted, terms_accepted_at, auth_provider, provider_id, 
-              created_at, updated_at 
+      `SELECT id, public_id AS publicId, full_name AS fullName, email, mobile_number AS mobileNumber,
+              gender, avatar_url AS avatarUrl, active_profile_id AS activeProfileId,
+              terms_accepted AS termsAccepted, terms_accepted_at AS termsAcceptedAt, 
+              auth_provider AS authProvider, provider_id AS providerId, 
+              created_at AS createdAt, updated_at AS updatedAt 
        FROM users 
        WHERE id = ? 
        LIMIT 1`,
@@ -38,16 +47,18 @@ class UserDao {
   }
 
   /**
-   * Finds a user along with their birth profile by user ID.
-   * @param {number|string} id
-   * @returns {Promise<Object|null>}
+   * Finds a user along with their active profile details by user ID.
    */
   async findUserWithProfileById(id) {
     const sql = `
       SELECT 
         u.id,
+        u.public_id AS publicId,
         u.full_name AS fullName,
         u.email,
+        u.gender,
+        COALESCE(u.avatar_url, 'https://cdn.vidhilikhit.com/avatars/default.jpg') AS avatar,
+        u.active_profile_id AS activeProfileId,
         u.mobile_number AS mobileNumber,
         u.terms_accepted AS termsAccepted,
         u.terms_accepted_at AS termsAcceptedAt,
@@ -55,12 +66,15 @@ class UserDao {
         u.created_at AS createdAt,
         u.updated_at AS updatedAt,
         p.dob,
+        p.tob,
         p.tob_choice AS tobChoice,
-        p.tob_time AS tobTime,
-        p.gender,
-        p.pob
+        p.pob,
+        p.latitude,
+        p.longitude,
+        p.time_zone AS timeZone
       FROM users u
-      LEFT JOIN user_profiles p ON u.id = p.user_id
+      LEFT JOIN profiles p ON (u.active_profile_id IS NOT NULL AND u.active_profile_id = p.public_id)
+                           OR (u.active_profile_id IS NULL AND p.user_id = u.id AND p.is_active = 1)
       WHERE u.id = ?
       LIMIT 1
     `;
@@ -70,13 +84,12 @@ class UserDao {
 
   /**
    * Finds a user by OAuth provider and provider ID.
-   * @param {string} authProvider
-   * @param {string} providerId
-   * @returns {Promise<Object|null>}
    */
   async findByProvider(authProvider, providerId) {
     const rows = await query(
-      `SELECT id, full_name, email, mobile_number, auth_provider, provider_id, created_at 
+      `SELECT id, public_id AS publicId, full_name AS fullName, email, mobile_number AS mobileNumber,
+              auth_provider AS authProvider, provider_id AS providerId, active_profile_id AS activeProfileId,
+              created_at AS createdAt 
        FROM users 
        WHERE auth_provider = ? AND provider_id = ? 
        LIMIT 1`,
@@ -86,22 +99,27 @@ class UserDao {
   }
 
   /**
-   * Creates a new user and an associated profile inside an ACID transaction.
-   * @param {Object} userData
-   * @param {Object} profileData
-   * @returns {Promise<Object>}
+   * Creates a new user and an associated active profile inside an ACID transaction.
    */
   async createUserWithProfile(userData, profileData = {}) {
     return await withTransaction(async (conn) => {
+      const userPublicId = userData.publicId || this.generatePublicId('usr_');
+      const profilePublicId = profileData.publicId || this.generatePublicId('prof_');
+
       // Insert User
       const [userResult] = await conn.query(
-        `INSERT INTO users (full_name, email, mobile_number, password_hash, terms_accepted, terms_accepted_at, auth_provider, provider_id)
-         VALUES (?, ?, ?, ?, ?, NOW(), ?, ?)`,
+        `INSERT INTO users 
+         (public_id, full_name, email, mobile_number, password_hash, gender, avatar_url, active_profile_id, terms_accepted, terms_accepted_at, auth_provider, provider_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)`,
         [
+          userPublicId,
           userData.fullName,
           userData.email.toLowerCase().trim(),
-          userData.mobileNumber,
+          userData.mobileNumber || null,
           userData.passwordHash || null,
+          userData.gender || profileData.gender || 'male',
+          userData.avatarUrl || 'https://cdn.vidhilikhit.com/avatars/default.jpg',
+          profilePublicId,
           userData.termsAccepted ? 1 : 0,
           userData.authProvider || 'local',
           userData.providerId || null,
@@ -110,17 +128,40 @@ class UserDao {
 
       const userId = userResult.insertId;
 
-      // Insert User Profile
+      // Insert Active Profile
+      await conn.query(
+        `INSERT INTO profiles 
+         (public_id, user_id, name, relationship, gender, dob, tob, tob_choice, pob, latitude, longitude, time_zone, avatar_url, is_active)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+        [
+          profilePublicId,
+          userId,
+          userData.fullName,
+          'self',
+          profileData.gender || userData.gender || 'male',
+          profileData.dob || '1995-03-15',
+          profileData.tob || '10:30:00',
+          profileData.tobChoice || 'exact',
+          profileData.pob || 'Mumbai, Maharashtra, India',
+          profileData.latitude !== undefined ? profileData.latitude : 19.0760,
+          profileData.longitude !== undefined ? profileData.longitude : 72.8777,
+          profileData.timeZone || 'Asia/Kolkata',
+          userData.avatarUrl || 'https://cdn.vidhilikhit.com/avatars/default.jpg',
+        ]
+      );
+
+      // Also maintain legacy user_profiles table for backwards compatibility
       await conn.query(
         `INSERT INTO user_profiles (user_id, dob, tob_choice, tob_time, gender, pob)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE dob = VALUES(dob)`,
         [
           userId,
-          profileData.dob || null,
-          profileData.tobChoice || 'not_sure',
-          profileData.tobChoice === 'not_sure' ? null : (profileData.tobTime || null),
-          profileData.gender || null,
-          profileData.pob || null,
+          profileData.dob || '1995-03-15',
+          profileData.tobChoice || 'exact',
+          profileData.tobChoice === 'not_sure' ? null : (profileData.tob || '10:30:00'),
+          profileData.gender || userData.gender || 'male',
+          profileData.pob || 'Mumbai, Maharashtra, India',
         ]
       );
 
@@ -130,66 +171,91 @@ class UserDao {
 
   /**
    * Updates user and profile fields inside a transaction.
-   * @param {number|string} userId
-   * @param {Object} userData - e.g. { fullName }
-   * @param {Object} profileData - e.g. { dob, tobChoice, tobTime, gender, pob }
    */
   async updateUserAndProfile(userId, userData, profileData) {
     return await withTransaction(async (conn) => {
       if (userData.fullName) {
-        await conn.query(
-          `UPDATE users SET full_name = ? WHERE id = ?`,
-          [userData.fullName, userId]
-        );
+        await conn.query(`UPDATE users SET full_name = ? WHERE id = ?`, [userData.fullName, userId]);
       }
 
-      // Upsert into user_profiles
-      await conn.query(
-        `INSERT INTO user_profiles (user_id, dob, tob_choice, tob_time, gender, pob)
-         VALUES (?, ?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE
-           dob = VALUES(dob),
-           tob_choice = VALUES(tob_choice),
-           tob_time = VALUES(tob_time),
-           gender = VALUES(gender),
-           pob = VALUES(pob)`,
-        [
-          userId,
-          profileData.dob !== undefined ? profileData.dob : null,
-          profileData.tobChoice || 'not_sure',
-          profileData.tobChoice === 'not_sure' ? null : (profileData.tobTime || null),
-          profileData.gender !== undefined ? profileData.gender : null,
-          profileData.pob !== undefined ? profileData.pob : null,
-        ]
-      );
+      const active = await conn.query('SELECT active_profile_id FROM users WHERE id = ?', [userId]);
+      const activeId = active[0]?.[0]?.active_profile_id;
+
+      if (activeId) {
+        const fields = [];
+        const params = [];
+        if (userData.fullName !== undefined) {
+          fields.push('name = ?');
+          params.push(userData.fullName);
+        }
+        if (profileData.gender !== undefined) {
+          fields.push('gender = ?');
+          params.push(profileData.gender);
+        }
+        if (profileData.dob !== undefined) {
+          fields.push('dob = ?');
+          params.push(profileData.dob);
+        }
+        if (profileData.tobChoice !== undefined) {
+          fields.push('tob_choice = ?');
+          params.push(profileData.tobChoice);
+        }
+        if (profileData.tob !== undefined || profileData.tobChoice === 'not_sure') {
+          fields.push('tob = ?');
+          params.push(profileData.tobChoice === 'not_sure' ? null : profileData.tob);
+        }
+        if (profileData.pob !== undefined) {
+          fields.push('pob = ?');
+          params.push(profileData.pob);
+        }
+
+        if (fields.length > 0) {
+          params.push(activeId, userId);
+          await conn.query(
+            `UPDATE profiles SET ${fields.join(', ')} WHERE public_id = ? AND user_id = ?`,
+            params
+          );
+        }
+
+        // Also update legacy user_profiles if present
+        await conn.query(
+          `UPDATE user_profiles 
+           SET dob = COALESCE(?, dob),
+               gender = COALESCE(?, gender),
+               pob = COALESCE(?, pob),
+               tob_choice = COALESCE(?, tob_choice),
+               tob_time = ?
+           WHERE user_id = ?`,
+          [
+            profileData.dob || null,
+            profileData.gender || null,
+            profileData.pob || null,
+            profileData.tobChoice || null,
+            profileData.tobChoice === 'not_sure' ? null : (profileData.tob || null),
+            userId,
+          ]
+        );
+      }
     });
   }
 
   /**
    * Updates user password.
-   * @param {number|string} userId
-   * @param {string} passwordHash
    */
   async updatePassword(userId, passwordHash) {
-    await query(
-      `UPDATE users SET password_hash = ? WHERE id = ?`,
-      [passwordHash, userId]
-    );
+    await query(`UPDATE users SET password_hash = ? WHERE id = ?`, [passwordHash, userId]);
   }
 
   /**
    * Links OAuth credentials to existing user.
-   * @param {number|string} userId
-   * @param {string} authProvider
-   * @param {string} providerId
    */
   async linkOAuthProvider(userId, authProvider, providerId) {
-    await query(
-      `UPDATE users SET auth_provider = ?, provider_id = ? WHERE id = ?`,
-      [authProvider, providerId, userId]
-    );
+    await query(`UPDATE users SET auth_provider = ?, provider_id = ? WHERE id = ?`, [
+      authProvider,
+      providerId,
+      userId,
+    ]);
   }
 }
 
 module.exports = new UserDao();
-

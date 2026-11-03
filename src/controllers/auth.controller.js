@@ -1,3 +1,4 @@
+// Assumption: AuthController handles register, login, forgot-password, reset-password, and OAuth endpoints per spec.
 const authService = require('../services/auth.service');
 const { success } = require('../utils/response');
 
@@ -5,7 +6,7 @@ class AuthController {
   async register(req, res, next) {
     try {
       const result = await authService.register(req.body);
-      return success(res, result, 'Account created successfully.', 201);
+      return success(res, result, 'User registered successfully', 201);
     } catch (err) {
       next(err);
     }
@@ -15,7 +16,7 @@ class AuthController {
     try {
       const { email, password } = req.body;
       const result = await authService.login(email, password);
-      return success(res, result, 'Login successful.', 200);
+      return success(res, result, 'Login successful', 200);
     } catch (err) {
       next(err);
     }
@@ -44,7 +45,6 @@ class AuthController {
   async googleAuth(req, res, next) {
     try {
       const authUrl = authService.getGoogleAuthUrl();
-      // If client requests JSON (e.g. mobile app/postman), return URL, otherwise redirect
       if (req.headers.accept && req.headers.accept.includes('application/json')) {
         return success(res, { authUrl }, 'Google OAuth authorization URL', 200);
       }
@@ -74,7 +74,7 @@ class AuthController {
       if (!email || !providerId) {
         return res.status(400).json({
           success: false,
-          message: 'Both email and providerId (Google sub ID) are required.',
+          message: 'Both email and providerId are required.',
         });
       }
 
@@ -90,7 +90,16 @@ class AuthController {
       next(err);
     }
   }
+
+  async getMe(req, res, next) {
+    try {
+      const userId = req.user.userId || req.user.id;
+      const result = await authService.getMe(userId);
+      return success(res, result, 'User profile retrieved successfully', 200);
+    } catch (err) {
+      next(err);
+    }
+  }
 }
 
 module.exports = new AuthController();
-

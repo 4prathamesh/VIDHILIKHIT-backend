@@ -1,3 +1,4 @@
+// Assumption: Tokens object contains accessToken (JWT 24h) and refreshToken (random 64-char hex or 7d JWT).
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const config = require('../config/env');
@@ -11,6 +12,19 @@ function signToken(payload) {
   return jwt.sign(payload, config.jwt.secret, {
     expiresIn: config.jwt.expiresIn,
   });
+}
+
+/**
+ * Generates both accessToken and refreshToken matching the spec.
+ * @param {Object} payload
+ * @returns {{ accessToken: string, refreshToken: string }}
+ */
+function signTokens(payload) {
+  const accessToken = jwt.sign(payload, config.jwt.secret, {
+    expiresIn: config.jwt.expiresIn,
+  });
+  const refreshToken = crypto.randomBytes(32).toString('hex');
+  return { accessToken, refreshToken };
 }
 
 /**
@@ -41,8 +55,8 @@ function hashString(rawString) {
 
 module.exports = {
   signToken,
+  signTokens,
   verifyToken,
   generateRandomToken,
   hashString,
 };
-

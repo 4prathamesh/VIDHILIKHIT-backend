@@ -1,9 +1,10 @@
+// Assumption: UserService maintains backward compatibility for /users/profile endpoints.
 const userDao = require('../daos/user.dao');
+const profileDao = require('../daos/profile.dao');
 
 class UserService {
   /**
    * Retrieves user profile and birth details.
-   * @param {number|string} userId
    */
   async getProfile(userId) {
     const user = await userDao.findUserWithProfileById(userId);
@@ -14,10 +15,11 @@ class UserService {
     }
 
     return {
-      id: user.id,
+      id: user.publicId || user.id,
       fullName: user.fullName,
       email: user.email,
       mobileNumber: user.mobileNumber,
+      gender: user.gender,
       termsAccepted: Boolean(user.termsAccepted),
       termsAcceptedAt: user.termsAcceptedAt,
       authProvider: user.authProvider,
@@ -26,7 +28,7 @@ class UserService {
       birthDetails: {
         dob: user.dob,
         tobChoice: user.tobChoice,
-        tobTime: user.tobTime,
+        tobTime: user.tob,
         gender: user.gender,
         pob: user.pob,
       },
@@ -35,8 +37,6 @@ class UserService {
 
   /**
    * Updates user name and birth profile details.
-   * @param {number|string} userId
-   * @param {Object} updateData
    */
   async updateProfile(userId, updateData) {
     const existing = await userDao.findUserWithProfileById(userId);
@@ -46,21 +46,20 @@ class UserService {
       throw err;
     }
 
-    const { fullName, gender, dob, tobChoice, tobTime, pob } = updateData;
+    const { fullName, gender, dob, tobChoice, tobTime, tob, pob } = updateData;
 
-    // Determine target TOB values
+    const timeVal = tobTime !== undefined ? tobTime : tob;
     let targetTobChoice = tobChoice !== undefined ? tobChoice : existing.tobChoice;
     let targetTobTime;
 
     if (targetTobChoice === 'not_sure') {
       targetTobTime = null;
-    } else if (tobTime !== undefined) {
-      targetTobTime = tobTime;
+    } else if (timeVal !== undefined) {
+      targetTobTime = timeVal;
     } else {
-      targetTobTime = existing.tobTime;
+      targetTobTime = existing.tob;
     }
 
-    // Enforce business rule: if tobChoice is exact or approximate, tobTime cannot be null
     if ((targetTobChoice === 'exact' || targetTobChoice === 'approximate') && !targetTobTime) {
       const err = new Error(`Time of birth is required when "${targetTobChoice}" is selected.`);
       err.statusCode = 422;
@@ -74,7 +73,7 @@ class UserService {
     const profileData = {
       dob: dob !== undefined ? dob : existing.dob,
       tobChoice: targetTobChoice,
-      tobTime: targetTobTime,
+      tob: targetTobTime,
       gender: gender !== undefined ? gender : existing.gender,
       pob: pob !== undefined ? pob : existing.pob,
     };
@@ -86,4 +85,3 @@ class UserService {
 }
 
 module.exports = new UserService();
-

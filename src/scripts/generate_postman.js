@@ -1,0 +1,706 @@
+// Assumption: Generates complete Postman Collection v2.1 for all 9 flows specified in Vidhilikhit Vedic Astrology API specification.
+const fs = require('fs');
+const path = require('path');
+
+const collection = {
+  info: {
+    _postman_id: 'vidhilikhit-vedic-v2-collection',
+    name: 'Vidhilikhit Vedic Astrology API (v1)',
+    description: 'Complete Postman Collection v2.1 for Vidhilikhit Vedic Astrology Backend API covering all 9 flows under /api/v1.',
+    schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
+  },
+  auth: {
+    type: 'bearer',
+    bearer: [
+      {
+        key: 'token',
+        value: '{{token}}',
+        type: 'string',
+      },
+    ],
+  },
+  item: [
+    {
+      name: 'Flow 1: Authentication & User Setup',
+      item: [
+        {
+          name: '1.1 Register User',
+          request: {
+            auth: { type: 'noauth' },
+            method: 'POST',
+            header: [{ key: 'Content-Type', value: 'application/json' }],
+            body: {
+              mode: 'raw',
+              raw: JSON.stringify(
+                {
+                  fullName: 'Aarav Mehta',
+                  email: 'aarav.mehta@example.com',
+                  password: 'Password@123',
+                  gender: 'male',
+                  dob: '1995-03-15',
+                  tob: '10:30',
+                  tobChoice: 'exact',
+                  pob: 'Mumbai, Maharashtra, India',
+                  latitude: 19.076,
+                  longitude: 72.8777,
+                  timeZone: 'Asia/Kolkata',
+                },
+                null,
+                2
+              ),
+            },
+            url: {
+              raw: '{{baseUrl}}/auth/register',
+              host: ['{{baseUrl}}'],
+              path: ['auth', 'register'],
+            },
+            description: 'Registers a new user and provisions their active root birth profile.',
+          },
+        },
+        {
+          name: '1.2 Login User (Auto-stores token)',
+          event: [
+            {
+              listen: 'test',
+              script: {
+                type: 'text/javascript',
+                exec: [
+                  'if (pm.response.code === 200) {',
+                  '    var res = pm.response.json();',
+                  '    if (res.data && res.data.tokens && res.data.tokens.accessToken) {',
+                  '        pm.environment.set("token", res.data.tokens.accessToken);',
+                  '        console.log("Token stored successfully:", res.data.tokens.accessToken);',
+                  '    }',
+                  '    if (res.data && res.data.user && res.data.user.activeProfileId) {',
+                  '        pm.environment.set("profileId", res.data.user.activeProfileId);',
+                  '    }',
+                  '}',
+                ],
+              },
+            },
+          ],
+          request: {
+            auth: { type: 'noauth' },
+            method: 'POST',
+            header: [{ key: 'Content-Type', value: 'application/json' }],
+            body: {
+              mode: 'raw',
+              raw: JSON.stringify(
+                {
+                  email: 'aarav.mehta@example.com',
+                  password: 'Password@123',
+                },
+                null,
+                2
+              ),
+            },
+            url: {
+              raw: '{{baseUrl}}/auth/login',
+              host: ['{{baseUrl}}'],
+              path: ['auth', 'login'],
+            },
+            description: 'Authenticates user and returns JWT accessToken and refreshToken. The test script automatically stores the token in the environment.',
+          },
+        },
+        {
+          name: '1.3 Forgot Password',
+          request: {
+            auth: { type: 'noauth' },
+            method: 'POST',
+            header: [{ key: 'Content-Type', value: 'application/json' }],
+            body: {
+              mode: 'raw',
+              raw: JSON.stringify(
+                {
+                  email: 'aarav.mehta@example.com',
+                },
+                null,
+                2
+              ),
+            },
+            url: {
+              raw: '{{baseUrl}}/auth/forgot-password',
+              host: ['{{baseUrl}}'],
+              path: ['auth', 'forgot-password'],
+            },
+            description: 'Initiates password reset email flow.',
+          },
+        },
+        {
+          name: '1.4 Reset Password',
+          request: {
+            auth: { type: 'noauth' },
+            method: 'POST',
+            header: [{ key: 'Content-Type', value: 'application/json' }],
+            body: {
+              mode: 'raw',
+              raw: JSON.stringify(
+                {
+                  token: '{{resetToken}}',
+                  password: 'NewSecurePassword@123',
+                },
+                null,
+                2
+              ),
+            },
+            url: {
+              raw: '{{baseUrl}}/auth/reset-password',
+              host: ['{{baseUrl}}'],
+              path: ['auth', 'reset-password'],
+            },
+            description: 'Resets account password using single-use reset token.',
+          },
+        },
+        {
+          name: '1.5 Get Current User (Me)',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/auth/me',
+              host: ['{{baseUrl}}'],
+              path: ['auth', 'me'],
+            },
+            description: 'Fetches authenticated user information and active profile ID.',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Flow 2: Multiple Profiles & Family Switcher',
+      item: [
+        {
+          name: '2.1 List All Profiles',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/profiles',
+              host: ['{{baseUrl}}'],
+              path: ['profiles'],
+            },
+            description: 'Retrieves all family profiles for the current user and shows which is currently active.',
+          },
+        },
+        {
+          name: '2.2 Create Family Profile',
+          event: [
+            {
+              listen: 'test',
+              script: {
+                type: 'text/javascript',
+                exec: [
+                  'if (pm.response.code === 201) {',
+                  '    var res = pm.response.json();',
+                  '    if (res.data && res.data.id) {',
+                  '        pm.environment.set("profileId", res.data.id);',
+                  '        console.log("Profile ID stored:", res.data.id);',
+                  '    }',
+                  '}',
+                ],
+              },
+            },
+          ],
+          request: {
+            method: 'POST',
+            header: [{ key: 'Content-Type', value: 'application/json' }],
+            body: {
+              mode: 'raw',
+              raw: JSON.stringify(
+                {
+                  name: 'Pooja Mehta',
+                  relationship: 'spouse',
+                  gender: 'female',
+                  dob: '1996-08-22',
+                  tob: '14:15',
+                  tobChoice: 'exact',
+                  pob: 'Pune, Maharashtra, India',
+                  latitude: 18.5204,
+                  longitude: 73.8567,
+                  timeZone: 'Asia/Kolkata',
+                },
+                null,
+                2
+              ),
+            },
+            url: {
+              raw: '{{baseUrl}}/profiles',
+              host: ['{{baseUrl}}'],
+              path: ['profiles'],
+            },
+            description: 'Adds a family member profile (spouse, child, parent, sibling, partner, relative, friend).',
+          },
+        },
+        {
+          name: '2.3 Switch Active Profile',
+          request: {
+            method: 'POST',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/profiles/{{profileId}}/activate',
+              host: ['{{baseUrl}}'],
+              path: ['profiles', '{{profileId}}', 'activate'],
+            },
+            description: 'Switches the active profile so that subsequent dashboard and kundali calculations reflect this family member.',
+          },
+        },
+        {
+          name: '2.4 Update Profile Details',
+          request: {
+            method: 'PUT',
+            header: [{ key: 'Content-Type', value: 'application/json' }],
+            body: {
+              mode: 'raw',
+              raw: JSON.stringify(
+                {
+                  name: 'Pooja A. Mehta',
+                  pob: 'Pune, Maharashtra, India',
+                },
+                null,
+                2
+              ),
+            },
+            url: {
+              raw: '{{baseUrl}}/profiles/{{profileId}}',
+              host: ['{{baseUrl}}'],
+              path: ['profiles', '{{profileId}}'],
+            },
+            description: 'Updates details of a family profile.',
+          },
+        },
+        {
+          name: '2.5 Delete Profile',
+          request: {
+            method: 'DELETE',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/profiles/{{profileId}}',
+              host: ['{{baseUrl}}'],
+              path: ['profiles', '{{profileId}}'],
+            },
+            description: 'Deletes a family profile.',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Flow 3: Home Dashboard & Notifications',
+      item: [
+        {
+          name: '3.1 Get Home Dashboard Summary',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/home/dashboard',
+              host: ['{{baseUrl}}'],
+              path: ['home', 'dashboard'],
+            },
+            description: 'Fetches home dashboard greeting, active Mahadasha, daily horoscope glimpse, panchang snippet, and quick actions.',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Flow 4: My Kundali (Calculations & Charts)',
+      item: [
+        {
+          name: '4.1 Kundali Overview & Chart',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/kundali/overview?chartStyle=north&profileId={{profileId}}',
+              host: ['{{baseUrl}}'],
+              path: ['kundali', 'overview'],
+              query: [
+                { key: 'chartStyle', value: 'north' },
+                { key: 'profileId', value: '{{profileId}}' },
+              ],
+            },
+            description: 'Calculates Ascendant, Moon sign, Nakshatra, D1 chart house placements, and rendered SVG diagram URL.',
+          },
+        },
+        {
+          name: '4.2 Graha Positions (9 Planets)',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/kundali/grahas?profileId={{profileId}}',
+              host: ['{{baseUrl}}'],
+              path: ['kundali', 'grahas'],
+              query: [{ key: 'profileId', value: '{{profileId}}' }],
+            },
+            description: 'Returns real ephemeris positions for 9 grahas (Sun, Moon, Mars, Mercury, Jupiter, Venus, Saturn, Rahu, Ketu) with retrograde, combustion, and dignities.',
+          },
+        },
+        {
+          name: '4.3 Bhavas (12 Houses Analysis)',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/kundali/bhavas?profileId={{profileId}}',
+              host: ['{{baseUrl}}'],
+              path: ['kundali', 'bhavas'],
+              query: [{ key: 'profileId', value: '{{profileId}}' }],
+            },
+            description: 'Analyzes all 12 houses (bhavas), their lords, resident grahas, aspects, and sign placement.',
+          },
+        },
+        {
+          name: '4.4 Vargas (Divisional Charts D1-D12)',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/kundali/vargas?profileId={{profileId}}',
+              host: ['{{baseUrl}}'],
+              path: ['kundali', 'vargas'],
+              query: [{ key: 'profileId', value: '{{profileId}}' }],
+            },
+            description: 'Returns divisional charts D1 (Rashi), D4 (Chaturthamsa), D7 (Saptamsa), D9 (Navamsha), D10 (Dashamsha), and D12 (Dwadasamsa).',
+          },
+        },
+        {
+          name: '4.5 Yogas (Planetary Combinations)',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/kundali/yogas?profileId={{profileId}}',
+              host: ['{{baseUrl}}'],
+              path: ['kundali', 'yogas'],
+              query: [{ key: 'profileId', value: '{{profileId}}' }],
+            },
+            description: 'Detects classical Vedic planetary yogas (Raja, Dhana, Gajakesari, Budhaditya, etc.) with description and strength.',
+          },
+        },
+        {
+          name: '4.6 Dasha (Vimshottari Timeline)',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/kundali/dasha?profileId={{profileId}}',
+              host: ['{{baseUrl}}'],
+              path: ['kundali', 'dasha'],
+              query: [{ key: 'profileId', value: '{{profileId}}' }],
+            },
+            description: 'Computes exact 120-year Vimshottari Mahadasha timeline with active Antardashas and Pratyantardashas.',
+          },
+        },
+        {
+          name: '4.7 Render Chart SVG',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/kundali/chart-render/d1.svg?chartStyle=north&profileId={{profileId}}',
+              host: ['{{baseUrl}}'],
+              path: ['kundali', 'chart-render', 'd1.svg'],
+              query: [
+                { key: 'chartStyle', value: 'north' },
+                { key: 'profileId', value: '{{profileId}}' },
+              ],
+            },
+            description: 'Returns a standalone SVG vector diagram of the North or South Indian chart.',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Flow 5: Matchmaking & Kundali Milan',
+      item: [
+        {
+          name: '5.1 Calculate Compatibility & 36 Gunas',
+          event: [
+            {
+              listen: 'test',
+              script: {
+                type: 'text/javascript',
+                exec: [
+                  'if (pm.response.code === 200) {',
+                  '    var res = pm.response.json();',
+                  '    if (res.data && res.data.matchId) {',
+                  '        pm.environment.set("matchId", res.data.matchId);',
+                  '        console.log("Match ID stored:", res.data.matchId);',
+                  '    }',
+                  '}',
+                ],
+              },
+            },
+          ],
+          request: {
+            method: 'POST',
+            header: [{ key: 'Content-Type', value: 'application/json' }],
+            body: {
+              mode: 'raw',
+              raw: JSON.stringify(
+                {
+                  person1: {
+                    name: 'Alivia Mondal',
+                    gender: 'female',
+                    dob: '1995-03-15',
+                    tob: '10:30',
+                    tobChoice: 'exact',
+                    pob: 'Mumbai, Maharashtra, India',
+                    latitude: 19.076,
+                    longitude: 72.8777,
+                    timeZone: 'Asia/Kolkata',
+                  },
+                  person2: {
+                    name: 'Aarav Sharma',
+                    gender: 'male',
+                    dob: '1994-11-20',
+                    tob: '14:15',
+                    tobChoice: 'exact',
+                    pob: 'Pune, Maharashtra, India',
+                    latitude: 18.5204,
+                    longitude: 73.8567,
+                    timeZone: 'Asia/Kolkata',
+                  },
+                },
+                null,
+                2
+              ),
+            },
+            url: {
+              raw: '{{baseUrl}}/matchmaking/calculate',
+              host: ['{{baseUrl}}'],
+              path: ['matchmaking', 'calculate'],
+            },
+            description: 'Calculates Ashtakoota 36 Gunas score, Manglik Dosha analysis for both charts, 7 compatibility dimensions, and recommendation.',
+          },
+        },
+        {
+          name: '5.2 Get Matchmaking Detailed Analysis',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/matchmaking/{{matchId}}/details',
+              host: ['{{baseUrl}}'],
+              path: ['matchmaking', '{{matchId}}', 'details'],
+            },
+            description: 'Fetches the 8 individual Ashtakoota scores (Varna, Vashya, Tara, Yoni, Graha Maitri, Gana, Bhakoot, Nadi) and 7 compatibility dimensions.',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Flow 6: Daily Guidance & Panchang',
+      item: [
+        {
+          name: '6.1 Forecast - Today',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/guidance/forecast?timeframe=today&profileId={{profileId}}',
+              host: ['{{baseUrl}}'],
+              path: ['guidance', 'forecast'],
+              query: [
+                { key: 'timeframe', value: 'today' },
+                { key: 'profileId', value: '{{profileId}}' },
+              ],
+            },
+            description: 'Returns today\'s personalised forecast, Tithi, Nakshatra, Yoga, Karana, Rahu Kaal, Auspicious timings, lucky color & number.',
+          },
+        },
+        {
+          name: '6.2 Forecast - Tomorrow',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/guidance/forecast?timeframe=tomorrow&profileId={{profileId}}',
+              host: ['{{baseUrl}}'],
+              path: ['guidance', 'forecast'],
+              query: [
+                { key: 'timeframe', value: 'tomorrow' },
+                { key: 'profileId', value: '{{profileId}}' },
+              ],
+            },
+            description: 'Returns tomorrow\'s planetary guidance and Panchang timings.',
+          },
+        },
+        {
+          name: '6.3 Forecast - This Week',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/guidance/forecast?timeframe=this_week&profileId={{profileId}}',
+              host: ['{{baseUrl}}'],
+              path: ['guidance', 'forecast'],
+              query: [
+                { key: 'timeframe', value: 'this_week' },
+                { key: 'profileId', value: '{{profileId}}' },
+              ],
+            },
+            description: 'Returns 7-day weekly astrological forecast and planetary highlights.',
+          },
+        },
+        {
+          name: '6.4 Forecast - This Month',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/guidance/forecast?timeframe=this_month&profileId={{profileId}}',
+              host: ['{{baseUrl}}'],
+              path: ['guidance', 'forecast'],
+              query: [
+                { key: 'timeframe', value: 'this_month' },
+                { key: 'profileId', value: '{{profileId}}' },
+              ],
+            },
+            description: 'Returns monthly transits overview, auspicious dates, and caution windows.',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Flow 7: Specialized Astrology Reports',
+      item: [
+        {
+          name: '7.1 Report Catalog with INR Pricing',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/reports/catalog',
+              host: ['{{baseUrl}}'],
+              path: ['reports', 'catalog'],
+            },
+            description: 'Fetches catalog of in-depth PDF reports with titles, descriptions, page counts, and INR prices.',
+          },
+        },
+        {
+          name: '7.2 Generate Report (Asynchronous Job)',
+          event: [
+            {
+              listen: 'test',
+              script: {
+                type: 'text/javascript',
+                exec: [
+                  'if (pm.response.code === 202) {',
+                  '    var res = pm.response.json();',
+                  '    if (res.data && res.data.reportJobId) {',
+                  '        pm.environment.set("reportJobId", res.data.reportJobId);',
+                  '        console.log("Report Job ID stored:", res.data.reportJobId);',
+                  '    }',
+                  '}',
+                ],
+              },
+            },
+          ],
+          request: {
+            method: 'POST',
+            header: [{ key: 'Content-Type', value: 'application/json' }],
+            body: {
+              mode: 'raw',
+              raw: JSON.stringify(
+                {
+                  reportType: 'career_finances',
+                  profileId: '{{profileId}}',
+                },
+                null,
+                2
+              ),
+            },
+            url: {
+              raw: '{{baseUrl}}/reports/generate',
+              host: ['{{baseUrl}}'],
+              path: ['reports', 'generate'],
+            },
+            description: 'Submits an asynchronous background report generation request and receives a reportJobId.',
+          },
+        },
+        {
+          name: '7.3 Check Report Status & Download URL',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/reports/status/{{reportJobId}}',
+              host: ['{{baseUrl}}'],
+              path: ['reports', 'status', '{{reportJobId}}'],
+            },
+            description: 'Checks the status (processing / completed / failed) and retrieves the secure PDF download URL.',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Flow 8: Ask Vidhilikhit AI Vedic Consultation Bot',
+      item: [
+        {
+          name: '8.1 Get Chat History & Context',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/bot/chat/history?profileId={{profileId}}',
+              host: ['{{baseUrl}}'],
+              path: ['bot', 'chat', 'history'],
+              query: [{ key: 'profileId', value: '{{profileId}}' }],
+            },
+            description: 'Retrieves previous conversation history and active session information.',
+          },
+        },
+        {
+          name: '8.2 Send Consultation Message',
+          request: {
+            method: 'POST',
+            header: [{ key: 'Content-Type', value: 'application/json' }],
+            body: {
+              mode: 'raw',
+              raw: JSON.stringify(
+                {
+                  message: 'When will I experience positive career growth and job changes according to my current Mahadasha?',
+                  profileId: '{{profileId}}',
+                },
+                null,
+                2
+              ),
+            },
+            url: {
+              raw: '{{baseUrl}}/bot/chat/send',
+              host: ['{{baseUrl}}'],
+              path: ['bot', 'chat', 'send'],
+            },
+            description: 'Sends user question to the Vedic AI consultation bot with birth chart, Mahadasha, and transit context, receiving answer and follow-up chips.',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Flow 9: Utility APIs (Locations & Timezones)',
+      item: [
+        {
+          name: '9.1 Location Autocomplete',
+          request: {
+            auth: { type: 'noauth' },
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/locations/autocomplete?query=Mumb',
+              host: ['{{baseUrl}}'],
+              path: ['locations', 'autocomplete'],
+              query: [{ key: 'query', value: 'Mumb' }],
+            },
+            description: 'Searches cities/locations and returns latitude, longitude, timezone (IANA), and GMT offset.',
+          },
+        },
+      ],
+    },
+  ],
+};
+
+const outputPath = path.resolve(__dirname, '../../postman/Vidhilikhit_Vedic_API.postman_collection.json');
+fs.writeFileSync(outputPath, JSON.stringify(collection, null, 2), 'utf-8');
+console.log(`✅ Postman Collection successfully written to: ${outputPath}`);
+

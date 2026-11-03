@@ -1,6 +1,17 @@
+// Assumption: All API routes mount under /api/v1 prefix as defined in the Vidhilikhit specification.
 const express = require('express');
 const authRoutes = require('./auth.routes');
+const profileRoutes = require('./profile.routes');
+const dashboardRoutes = require('./dashboard.routes');
+const kundaliRoutes = require('./kundali.routes');
+const matchmakingRoutes = require('./matchmaking.routes');
+const guidanceRoutes = require('./guidance.routes');
+const reportRoutes = require('./report.routes');
+const botRoutes = require('./bot.routes');
+const locationRoutes = require('./location.routes');
 const userRoutes = require('./user.routes');
+const authenticate = require('../middlewares/auth.middleware');
+const authController = require('../controllers/auth.controller');
 
 const router = express.Router();
 
@@ -13,9 +24,19 @@ router.get('/health', (req, res) => {
   });
 });
 
-// Mount module routes
+// Spec flow modules
 router.use('/auth', authRoutes);
+router.get('/me', authenticate, authController.getMe);
+router.use('/profiles', profileRoutes);
+router.use('/home', dashboardRoutes);
+router.use('/kundali', kundaliRoutes);
+router.use('/matchmaking', matchmakingRoutes);
+router.use('/guidance', guidanceRoutes);
+router.use('/reports', reportRoutes);
+router.use('/bot', botRoutes);
+router.use('/locations', locationRoutes);
+
+// Compatibility route
 router.use('/users', userRoutes);
 
 module.exports = router;
-

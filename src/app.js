@@ -21,6 +21,27 @@ app.get('/', (req, res) => {
   });
 });
 
+// Backward compatibility & convenience URL rewrite for requests without /api/v1 prefix
+app.use((req, res, next) => {
+  if (
+    !req.url.startsWith('/api/v1') &&
+    (req.url.startsWith('/auth') ||
+      req.url.startsWith('/me') ||
+      req.url.startsWith('/profiles') ||
+      req.url.startsWith('/home') ||
+      req.url.startsWith('/kundali') ||
+      req.url.startsWith('/matchmaking') ||
+      req.url.startsWith('/guidance') ||
+      req.url.startsWith('/reports') ||
+      req.url.startsWith('/bot') ||
+      req.url.startsWith('/locations') ||
+      req.url.startsWith('/users'))
+  ) {
+    req.url = '/api/v1' + req.url;
+  }
+  next();
+});
+
 // API v1 routes
 app.use('/api/v1', routes);
 

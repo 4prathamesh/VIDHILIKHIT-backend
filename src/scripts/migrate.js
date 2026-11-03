@@ -36,12 +36,19 @@ async function runMigrations() {
   });
 
   try {
-    const migrationFile = path.resolve(__dirname, '../migrations/001_initial_schema.sql');
-    const sql = fs.readFileSync(migrationFile, 'utf8');
+    const migrationsDir = path.resolve(__dirname, '../migrations');
+    const files = fs.readdirSync(migrationsDir)
+      .filter((file) => file.endsWith('.sql'))
+      .sort();
 
-    console.log(`📄 Executing migration script: 001_initial_schema.sql...`);
-    await dbConn.query(sql);
-    console.log('✅ Migrations executed successfully!');
+    for (const file of files) {
+      const migrationFile = path.join(migrationsDir, file);
+      const sql = fs.readFileSync(migrationFile, 'utf8');
+      console.log(`📄 Executing migration script: ${file}...`);
+      await dbConn.query(sql);
+      console.log(`✅ Finished: ${file}`);
+    }
+    console.log('🎉 All migrations executed successfully!');
   } catch (err) {
     console.error('❌ Migration failed:', err.message);
     process.exit(1);
@@ -55,4 +62,3 @@ if (require.main === module) {
 }
 
 module.exports = runMigrations;
-
