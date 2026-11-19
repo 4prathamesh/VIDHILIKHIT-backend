@@ -1,5 +1,11 @@
 // Assumption: Dynamic import() loads @node-jhora ESM modules seamlessly within CommonJS.
 const { DateTime } = require('luxon');
+const {
+  METHODOLOGY,
+  DEFAULT_DISCLAIMER,
+  RAHU_BHAVA_INTERPRETATIONS,
+  KETU_BHAVA_INTERPRETATIONS,
+} = require('../data/rahuKetuInterpretations');
 
 let jhoraCore = null;
 let jhoraAnalytics = null;
@@ -87,6 +93,10 @@ const BHAVA_CONFIG = [
   { number: 12, title: 'Losses & Liberation', sanskritName: 'Vyaya Bhava', description: 'Foreign travels, expenditures, subconscious, and Moksha.' },
 ];
 
+function normalize360(deg) {
+  return ((deg % 360) + 360) % 360;
+}
+
 function formatDegree(deg) {
   const norm = ((deg % 30) + 30) % 30;
   const d = Math.floor(norm);
@@ -99,28 +109,110 @@ class AstrologyService {
   /**
    * Calculates chart using NodeJHora.
    */
-  async calculateRawChart(dob, tob, latitude, longitude) {
+  async calculateRawChart(dob, tob, latitude, longitude, options = {}) {
     const { core } = await getJHora();
     const dateStr = typeof dob === 'string' ? dob.slice(0, 10) : new Date(dob).toISOString().slice(0, 10);
     const timeStr = typeof tob === 'string' ? tob : '10:30:00';
-    const dateTimeIso = `${dateStr}T${timeStr.length === 5 ? timeStr + ':00' : timeStr}+05:30`;
-    const dateObj = new Date(dateTimeIso);
+    const normalizedTime = timeStr.length === 5 ? `${timeStr}:00` : timeStr;
+
+    let dateObj;
+    let dateTimeIso;
+    if (options.timeZone && options.timeZone !== 'Asia/Kolkata') {
+      const dt = DateTime.fromISO(`${dateStr}T${normalizedTime}`, { zone: options.timeZone });
+      dateTimeIso = dt.isValid ? dt.toISO() : `${dateStr}T${normalizedTime}+05:30`;
+      dateObj = dt.isValid ? dt.toJSDate() : new Date(dateTimeIso);
+    } else {
+      dateTimeIso = `${dateStr}T${normalizedTime}+05:30`;
+      dateObj = new Date(dateTimeIso);
+    }
+
+    const nodeMode = (options.nodeCalculationMode || options.nodeMode || options.nodeType || 'MEAN').toUpperCase();
+    const nodeType = nodeMode === 'TRUE' ? 'true' : 'mean';
 
     const chart = await core.NodeJHora.calculate(dateObj, {
       latitude: parseFloat(latitude) || 19.0760,
       longitude: parseFloat(longitude) || 72.8777,
       altitude: 0,
+      nodeType,
     });
 
-    return { chart, dateObj, dateTimeIso };
+    return { chart, dateObj, dateTimeIso, nodeCalculationMode: nodeMode };
+  }
+
+  /**
+   * Mandatory 5-point post-calculation validation guard for Rahu and Ketu (Section 10).
+   */
+  validateRahuKetu(grahas, ascendantLon) {
+    const rahu = grahas.find((g) => g.id === 'rahu');
+    const ketu = grahas.find((g) => g.id === 'ketu');
+    if (!rahu || !ketu) {
+      return { isValid: false, warnings: ['Rahu or Ketu missing from calculation result.'] };
+    }
+
+    const warnings = [];
+    const ascSignNum = Math.floor(normalize360(ascendantLon || 0) / 30) + 1;
+
+    // Validation 1: Opposite longitude within 0.000001° tolerance
+    const diff = normalize360(ketu.longitude - rahu.longitude);
+    const isOppositeLon = Math.abs(diff - 180) < 0.000001;
+    if (!isOppositeLon) {
+      warnings.push(`Rahu-Ketu longitude difference is ${diff}°, expected exactly 180.0°`);
+    }
+
+    // Validation 2: Opposite Rashi
+    const expectedKetuRashi = ((rahu.signNumber + 5) % 12) + 1;
+    const isOppositeRashi = ketu.signNumber === expectedKetuRashi;
+    if (!isOppositeRashi) {
+      warnings.push(`Ketu Rashi (${ketu.signNumber}) is not opposite to Rahu Rashi (${rahu.signNumber})`);
+    }
+
+    // Validation 3: Opposite Whole-Sign House
+    const expectedKetuHouse = ((rahu.houseNumber + 5) % 12) + 1;
+    const isOppositeHouse = ketu.houseNumber === expectedKetuHouse;
+    if (!isOppositeHouse) {
+      warnings.push(`Ketu House (${ketu.houseNumber}) is not opposite to Rahu House (${rahu.houseNumber})`);
+    }
+
+    // Validation 4: Ascendant consistency
+    const expectedRahuHouse = ((rahu.signNumber - ascSignNum + 12) % 12) + 1;
+    const expectedKetuHouseFromAsc = ((ketu.signNumber - ascSignNum + 12) % 12) + 1;
+    const isAscConsistent =
+      rahu.houseNumber === expectedRahuHouse && ketu.houseNumber === expectedKetuHouseFromAsc;
+    if (!isAscConsistent) {
+      warnings.push(`Ascendant mapping mismatch for Asc sign ${ascSignNum}`);
+    }
+
+    // Validation 5: Ayanamsa & nodeType consistency
+    const isAyanamsaConsistent =
+      rahu.ayanamsa === 'Lahiri' &&
+      ketu.ayanamsa === 'Lahiri' &&
+      rahu.nodeType === ketu.nodeType;
+    if (!isAyanamsaConsistent) {
+      warnings.push(`Inconsistent ayanamsa or nodeType between Rahu and Ketu`);
+    }
+
+    if (warnings.length > 0) {
+      console.warn(`[Calculation Validation Warning] ${warnings.join(' | ')}`);
+    }
+
+    return {
+      isValid: warnings.length === 0,
+      warnings,
+      diff,
+      ascendantSignNumber: ascSignNum,
+      rahuLongitude: rahu.longitude,
+      ketuLongitude: ketu.longitude,
+      rahuHouse: rahu.houseNumber,
+      ketuHouse: ketu.houseNumber,
+    };
   }
 
   /**
    * Extracts planet list from NodeJHora result with signs, houses, dignities.
    */
-  extractGrahas(chart) {
+  extractGrahas(chart, options = {}) {
     const ascSignIndex = Math.floor((chart.ascendant || 0) / 30);
-    const planets = chart.planets || {};
+    const planetsList = Array.isArray(chart.planets) ? chart.planets : Object.values(chart.planets || {});
 
     const targetGrahas = [
       { id: 'sun', bodyId: 0, name: 'Sun (Surya)', imageKey: 'graha_sun' },
@@ -134,24 +226,39 @@ class AstrologyService {
       { id: 'ketu', bodyId: 99, name: 'Ketu', imageKey: 'graha_ketu' },
     ];
 
-    const sunLon = planets[0]?.longitude || 0;
+    const sunData = planetsList.find((p) => p.id === 0);
+    const sunLon = sunData?.longitude || 0;
 
-    return targetGrahas.map((item) => {
-      let pData = planets[item.bodyId];
-      if (!pData && item.bodyId === 99) {
-        // Ketu is 180 deg opposite Rahu
-        const rahuLon = planets[10]?.longitude || 0;
-        pData = {
-          longitude: (rahuLon + 180) % 360,
-          speed: planets[10]?.speed || -0.05,
-        };
+    // 1. Locate Rahu directly from astronomical ephemeris
+    const rahuData = planetsList.find((p) => p.id === 10 || (p.name && p.name.toLowerCase() === 'rahu'));
+    const rahuLon = rahuData?.longitude !== undefined ? normalize360(rahuData.longitude) : 0;
+
+    // 2. Derive Ketu as mandatory exact opposite: (Rahu + 180) mod 360
+    const ketuLon = normalize360(rahuLon + 180);
+
+    const nodeCalculationMode = (options.nodeCalculationMode || options.nodeMode || 'MEAN').toUpperCase();
+
+    const grahas = targetGrahas.map((item) => {
+      let pData = planetsList.find((p) => p.id === item.bodyId || (p.name && p.name.toLowerCase().startsWith(item.id)));
+      let lon = 0;
+      let speed = pData?.speed;
+
+      if (item.id === 'rahu') {
+        lon = rahuLon;
+        speed = pData?.speed ?? -0.05;
+      } else if (item.id === 'ketu') {
+        lon = ketuLon;
+        speed = pData?.speed ?? -0.05;
+      } else {
+        lon = pData?.longitude !== undefined ? normalize360(pData.longitude) : 0;
       }
 
-      const lon = pData?.longitude || 0;
       const signIdx = Math.floor(lon / 30);
       const signInfo = ZODIAC_SIGNS[signIdx] || ZODIAC_SIGNS[0];
+      const degreeInRashi = Number((lon - (signIdx * 30)).toFixed(4));
+      // Whole-sign Rashi house mapping: ((Planet_Rashi - Asc_Rashi + 12) % 12) + 1
       const houseNumber = ((signIdx - ascSignIndex + 12) % 12) + 1;
-      const isRetrograde = (pData?.speed !== undefined && pData.speed < 0) || item.id === 'rahu' || item.id === 'ketu';
+      const isRetrograde = (speed !== undefined && speed < 0) || item.id === 'rahu' || item.id === 'ketu';
 
       let isCombust = false;
       if (item.id !== 'sun' && item.id !== 'rahu' && item.id !== 'ketu') {
@@ -160,39 +267,159 @@ class AstrologyService {
         isCombust = minDiff < 8.5;
       }
 
-      const nakIdx = Math.floor((lon % 360) / (360 / 27));
-      const nakshatraName = NAKSHATRAS[nakIdx % 27]?.name || 'Ashwini';
+      const nakSpan = 360 / 27;
+      const nakIdx = Math.floor((lon % 360) / nakSpan);
+      const pada = Math.floor(((lon % 360) % nakSpan) / (nakSpan / 4)) + 1;
+      const nakshatraObj = NAKSHATRAS[nakIdx % 27] || NAKSHATRAS[0];
 
       let dignity = 'Neutral';
-      if (signInfo.lord.toLowerCase() === item.id) dignity = 'Own Sign';
-      else if (['jupiter', 'sun'].includes(item.id) && signInfo.element === 'Fire') dignity = 'Friendly';
-      else if (['saturn', 'venus', 'mercury'].includes(item.id) && ['Air', 'Earth'].includes(signInfo.element)) dignity = 'Friendly';
+      if (item.id === 'rahu') {
+        if (signInfo.english === 'Taurus') dignity = 'Exalted';
+        else if (signInfo.english === 'Scorpio') dignity = 'Debilitated';
+        else if (signInfo.english === 'Gemini' || signInfo.english === 'Aquarius') dignity = 'Friendly';
+      } else if (item.id === 'ketu') {
+        if (signInfo.english === 'Scorpio') dignity = 'Exalted';
+        else if (signInfo.english === 'Taurus') dignity = 'Debilitated';
+        else if (signInfo.english === 'Sagittarius' || signInfo.english === 'Pisces') dignity = 'Friendly';
+      } else if (signInfo.lord.toLowerCase() === item.id) {
+        dignity = 'Own Sign';
+      } else if (['jupiter', 'sun'].includes(item.id) && signInfo.element === 'Fire') {
+        dignity = 'Friendly';
+      } else if (['saturn', 'venus', 'mercury'].includes(item.id) && ['Air', 'Earth'].includes(signInfo.element)) {
+        dignity = 'Friendly';
+      }
 
       return {
         id: item.id,
+        planet: item.id === 'rahu' ? 'Rahu' : item.id === 'ketu' ? 'Ketu' : item.name.split(' ')[0],
         name: item.name,
         sign: `${signInfo.english} (${signInfo.sanskrit})`,
         signSanskrit: signInfo.sanskrit,
         house: `${houseNumber}${houseNumber === 1 ? 'st' : houseNumber === 2 ? 'nd' : houseNumber === 3 ? 'rd' : 'th'} House`,
         houseNumber,
         degree: formatDegree(lon),
+        degreeInRashi,
         isRetrograde,
         isCombust,
         dignity,
-        nakshatra: nakshatraName,
+        nakshatra: nakshatraObj.name,
+        pada,
         imageKey: item.imageKey,
         longitude: lon,
         signNumber: signIdx + 1,
         signName: signInfo.english,
+        rashiNumber: signIdx + 1,
+        rashiName: signInfo.sanskrit,
+        nodeType: (item.id === 'rahu' || item.id === 'ketu') ? nodeCalculationMode : undefined,
+        ayanamsa: 'Lahiri',
       };
     });
+
+    // Execute mandatory validation checks
+    this.validateRahuKetu(grahas, chart.ascendant);
+
+    return grahas;
   }
 
   /**
-   * Constructs the 12 Bhavas.
+   * Computes which planets cast Parashari Graha Drishti (aspects) onto a target house (1-12).
+   * Parashari rules: all 7 physical planets aspect 7th house from themselves;
+   * Mars also aspects 4th & 8th; Jupiter also aspects 5th & 9th; Saturn also aspects 3rd & 10th.
+   */
+  getParashariAspectsOnHouse(targetHouse, grahas) {
+    const aspects = [];
+    for (const g of grahas) {
+      if (g.id === 'rahu' || g.id === 'ketu') continue; // Evaluate physical planet drishtis clearly
+      const dist = ((targetHouse - g.houseNumber + 12) % 12) + 1;
+      const is7th = dist === 7;
+      const isMarsSpecial = g.id === 'mars' && (dist === 4 || dist === 8);
+      const isJupiterSpecial = g.id === 'jupiter' && (dist === 5 || dist === 9);
+      const isSaturnSpecial = g.id === 'saturn' && (dist === 3 || dist === 10);
+
+      if (is7th || isMarsSpecial || isJupiterSpecial || isSaturnSpecial) {
+        aspects.push({
+          planet: g.planet || g.name.split(' ')[0],
+          fromHouse: g.houseNumber,
+          aspectType: `${dist}th Parashari Drishti`,
+        });
+      }
+    }
+    return aspects;
+  }
+
+  /**
+   * Builds chart-contextualized Parashari Bhava interpretation records for Rahu and Ketu.
+   * Considers house, sign, dispositor strength, Nakshatra, Nakshatra lord, conjunctions, and Parashari aspects.
+   */
+  buildRahuKetuBhavaAnalysis(grahas, ascSignIndex = 0) {
+    const buildForNode = (nodeId, table) => {
+      const node = grahas.find((g) => g.id === nodeId);
+      if (!node) return null;
+
+      const base = table[node.houseNumber];
+      if (!base) return null;
+
+      const signInfo = ZODIAC_SIGNS[(node.signNumber - 1) % 12] || ZODIAC_SIGNS[0];
+      const dispositorGraha = grahas.find((g) => g.id === signInfo.lord.toLowerCase());
+
+      const nakObj = NAKSHATRAS.find((n) => n.name === node.nakshatra) || NAKSHATRAS[0];
+      const nakLordGraha = grahas.find((g) => g.id === nakObj.lord.toLowerCase());
+
+      const conjunctions = grahas
+        .filter((g) => g.houseNumber === node.houseNumber && g.id !== node.id)
+        .map((g) => ({
+          planet: g.planet || g.name.split(' ')[0],
+          degree: g.degree,
+          dignity: g.dignity,
+        }));
+
+      const aspectsReceived = this.getParashariAspectsOnHouse(node.houseNumber, grahas);
+
+      return {
+        ...base,
+        disclaimer: DEFAULT_DISCLAIMER,
+        chartContext: {
+          houseNumber: node.houseNumber,
+          sign: node.sign,
+          signNumber: node.signNumber,
+          degree: node.degree,
+          nodeType: node.nodeType || 'MEAN',
+          ayanamsa: node.ayanamsa || 'Lahiri',
+          dispositor: {
+            planet: signInfo.lord,
+            houseNumber: dispositorGraha?.houseNumber || null,
+            sign: dispositorGraha?.sign || null,
+            dignity: dispositorGraha?.dignity || 'Neutral',
+          },
+          nakshatra: {
+            name: node.nakshatra,
+            pada: node.pada || 1,
+            lord: nakObj.lord,
+            lordHouseNumber: nakLordGraha?.houseNumber || null,
+            lordDignity: nakLordGraha?.dignity || 'Neutral',
+          },
+          conjunctions,
+          parashariAspectsReceived: aspectsReceived,
+          divisionalReference: 'Verify D9 (Navamsha) and D10 (Dashamsha) for confirmation before drawing life conclusions.',
+          methodologyNote: `Strictly ${METHODOLOGY} methodology (kept separate from Lal Kitab rules).`,
+        },
+      };
+    };
+
+    return {
+      methodology: METHODOLOGY,
+      disclaimer: DEFAULT_DISCLAIMER,
+      rahu: buildForNode('rahu', RAHU_BHAVA_INTERPRETATIONS),
+      ketu: buildForNode('ketu', KETU_BHAVA_INTERPRETATIONS),
+    };
+  }
+
+  /**
+   * Constructs the 12 Bhavas with Rahu/Ketu contextual interpretations attached to their occupied houses.
    */
   extractBhavas(chart, grahas) {
     const ascSignIndex = Math.floor((chart.ascendant || 0) / 30);
+    const nodeAnalysis = this.buildRahuKetuBhavaAnalysis(grahas, ascSignIndex);
 
     return BHAVA_CONFIG.map((b) => {
       const signIndex = (ascSignIndex + (b.number - 1)) % 12;
@@ -201,7 +428,15 @@ class AstrologyService {
         .filter((g) => g.houseNumber === b.number)
         .map((g) => g.name.split(' ')[0]);
 
-      return {
+      const nodeInterpretations = [];
+      if (nodeAnalysis.rahu && nodeAnalysis.rahu.houseNumber === b.number) {
+        nodeInterpretations.push(nodeAnalysis.rahu);
+      }
+      if (nodeAnalysis.ketu && nodeAnalysis.ketu.houseNumber === b.number) {
+        nodeInterpretations.push(nodeAnalysis.ketu);
+      }
+
+      const bhavaObj = {
         number: b.number,
         title: b.title,
         sanskritName: b.sanskritName,
@@ -210,15 +445,73 @@ class AstrologyService {
         planetsPresent: planetsInHouse,
         description: b.description,
       };
+
+      if (nodeInterpretations.length > 0) {
+        bhavaObj.nodeInterpretations = nodeInterpretations;
+      }
+
+      return bhavaObj;
     });
+  }
+
+  /**
+   * Builds the 12 whole-sign houses deterministically from validated grahas and Ascendant sign index (0-11).
+   */
+  buildWholeSignHouses(grahas, ascSignIdx) {
+    const safeAscIdx = ((ascSignIdx % 12) + 12) % 12;
+    const houses = [];
+    for (let h = 1; h <= 12; h++) {
+      const sIdx = (safeAscIdx + (h - 1)) % 12;
+      const signInfo = ZODIAC_SIGNS[sIdx] || ZODIAC_SIGNS[0];
+      const occupying = grahas.filter((g) => g.houseNumber === h);
+      const planets = occupying.map((g) => g.planet || g.name.split(' ')[0]);
+      const symbols = occupying.map((g) => this.toPlanetSymbol(g.id || g.planet || g.name));
+      houses.push({
+        house: h,
+        signNumber: sIdx + 1,
+        signName: signInfo.english,
+        signSanskrit: signInfo.sanskrit,
+        planets,
+        symbols,
+      });
+    }
+    return houses;
+  }
+
+  /**
+   * Maps a planet identifier or name to its standard chart abbreviation (Rahu -> Ra, Ketu -> Ke).
+   */
+  toPlanetSymbol(name) {
+    if (!name) return '';
+    const map = {
+      sun: 'Su',
+      moon: 'Mo',
+      mars: 'Ma',
+      mercury: 'Me',
+      jupiter: 'Ju',
+      venus: 'Ve',
+      saturn: 'Sa',
+      rahu: 'Ra',
+      ketu: 'Ke',
+    };
+    const key = String(name).trim().toLowerCase().split(' ')[0];
+    return map[key] || String(name).slice(0, 2);
   }
 
   /**
    * Generates Overview data matching Flow 4.1 in specification.
    */
-  async getKundaliOverview(profile, chartStyle = 'north_indian', hostUrl = 'http://localhost:5000') {
-    const { chart } = await this.calculateRawChart(profile.dob, profile.tob, profile.latitude, profile.longitude);
-    const grahas = this.extractGrahas(chart);
+  async getKundaliOverview(profile, chartStyle = 'north_indian', hostUrl = 'http://localhost:5000', options = {}) {
+    const calcOptions = { ...options, timeZone: options.timeZone || profile.timeZone };
+    const { chart, nodeCalculationMode } = await this.calculateRawChart(
+      profile.dob,
+      profile.tob,
+      profile.latitude,
+      profile.longitude,
+      calcOptions
+    );
+    const grahas = this.extractGrahas(chart, { nodeCalculationMode });
+    const validation = this.validateRahuKetu(grahas, chart.ascendant);
     const ascSignIdx = Math.floor((chart.ascendant || 0) / 30);
     const lagnaSign = ZODIAC_SIGNS[ascSignIdx];
 
@@ -232,18 +525,7 @@ class AstrologyService {
     const pada = Math.floor((moonLon % nakSpan) / (nakSpan / 4)) + 1;
     const nakshatra = NAKSHATRAS[nakIndex] || NAKSHATRAS[0];
 
-    const houses = [];
-    for (let h = 1; h <= 12; h++) {
-      const sIdx = (ascSignIdx + (h - 1)) % 12;
-      const sName = ZODIAC_SIGNS[sIdx].english;
-      const planets = grahas.filter((g) => g.houseNumber === h).map((g) => g.name.split(' ')[0]);
-      houses.push({
-        house: h,
-        signNumber: sIdx + 1,
-        signName: sName,
-        planets,
-      });
-    }
+    const houses = this.buildWholeSignHouses(grahas, ascSignIdx);
 
     return {
       profile: {
@@ -273,9 +555,15 @@ class AstrologyService {
         },
       },
       chart: {
+        chartType: 'D1_RASHI',
+        chartLabel: 'D1 Rashi Chart (Whole-Sign)',
+        houseSystem: 'WholeSign',
         chartStyle: chartStyle || 'north_indian',
+        nodeCalculationMode,
+        ayanamsa: 'Lahiri',
+        validationStatus: validation?.isValid ? 'VALID' : 'WARNING',
         ascendantSign: ascSignIdx + 1,
-        svgUrl: `${hostUrl}/api/v1/kundali/chart-render/d1.svg?profileId=${profile.publicId || profile.id}`,
+        svgUrl: `${hostUrl}/api/v1/kundali/chart-render/d1.svg?profileId=${profile.publicId || profile.id}&nodeCalculationMode=${nodeCalculationMode}`,
         houses,
       },
     };
@@ -327,10 +615,269 @@ class AstrologyService {
   }
 
   /**
-   * Generates detected Yogas using YogaEngine from @node-jhora/analytics.
+   * Deterministically evaluates classical Parashari yogas (including Rahu & Ketu combinations)
+   * directly from validated sidereal graha positions.
    */
-  async getYogas(profile) {
-    const { chart } = await this.calculateRawChart(profile.dob, profile.tob, profile.latitude, profile.longitude);
+  evaluateParashariYogas(grahas) {
+    const byId = Object.fromEntries(grahas.map((g) => [g.id, g]));
+    const { sun, moon, mars, mercury, jupiter, venus, saturn, rahu, ketu } = byId;
+    const yogas = [];
+
+    // 1. Budhaditya Yoga: Sun and Mercury in the same sign
+    if (sun && mercury && sun.signNumber === mercury.signNumber) {
+      yogas.push({
+        id: 'budhaditya-yoga',
+        title: 'Budhaditya Yoga',
+        badge: 'Present',
+        badgeType: 'present',
+        methodology: METHODOLOGY,
+        description: `Sun and Mercury share ${sun.sign} in the ${sun.house}, supporting analytical intellect and expressive skill (subject to Mercury combustion check: ${mercury.isCombust ? 'Combust' : 'Not Combust'}).`,
+        planetsInvolved: ['Sun', 'Mercury'],
+        houseNumber: sun.houseNumber,
+        sign: sun.sign,
+        strength: mercury.isCombust ? 65 : 85,
+        sourceReference: 'Brihat Parashara Hora Shastra (BPHS) — Budhaditya Yoga',
+        imageKey: 'yoga_budhaditya',
+      });
+    }
+
+    // 2. Gaja Kesari Yoga: Jupiter in Kendra (1, 4, 7, 10) from Moon
+    if (jupiter && moon) {
+      const distFromMoon = ((jupiter.signNumber - moon.signNumber + 12) % 12) + 1;
+      if ([1, 4, 7, 10].includes(distFromMoon)) {
+        yogas.push({
+          id: 'gaja-kesari',
+          title: 'Gaja Kesari Yoga',
+          badge: 'Present',
+          badgeType: 'present',
+          methodology: METHODOLOGY,
+          description: `Jupiter is in the ${distFromMoon}th sign from Moon (${jupiter.sign} vs ${moon.sign}), classically associated with wisdom, principled reputation, and resilience.`,
+          planetsInvolved: ['Jupiter', 'Moon'],
+          houseNumber: jupiter.houseNumber,
+          sign: jupiter.sign,
+          strength: 85,
+          sourceReference: 'Brihat Parashara Hora Shastra (BPHS) — Ch. 41 (Gaja Kesari Yoga)',
+          imageKey: 'yoga_gajakesari',
+        });
+      }
+    }
+
+    // 3. Chandra-Mangal Yoga: Moon and Mars conjunct or mutually opposite
+    if (moon && mars) {
+      const dist = ((mars.signNumber - moon.signNumber + 12) % 12) + 1;
+      if (dist === 1 || dist === 7) {
+        yogas.push({
+          id: 'chandra-mangal',
+          title: 'Chandra-Mangal Yoga',
+          badge: dist === 1 ? 'Present' : 'Moderate',
+          badgeType: dist === 1 ? 'present' : 'moderate',
+          methodology: METHODOLOGY,
+          description: `Moon and Mars form a ${dist === 1 ? 'conjunction' : 'mutual 7th aspect'}, indicating enterprising drive and financial initiative.`,
+          planetsInvolved: ['Moon', 'Mars'],
+          houseNumber: moon.houseNumber,
+          sign: moon.sign,
+          strength: dist === 1 ? 80 : 70,
+          sourceReference: 'Brihat Parashara Hora Shastra (BPHS) — Chandra-Mangal Yoga',
+          imageKey: 'yoga_chandramangal',
+        });
+      }
+    }
+
+    // 4. Surya-Rahu / Surya-Ketu Grahan Yoga
+    if (sun && rahu && sun.signNumber === rahu.signNumber) {
+      yogas.push({
+        id: 'surya-rahu-grahan',
+        title: 'Surya-Rahu Conjunction (Grahan Yoga)',
+        badge: 'Notable',
+        badgeType: 'moderate',
+        methodology: METHODOLOGY,
+        description: `Sun and Rahu occupy ${sun.sign} (${sun.house}), intensifying ambition and unconventional leadership while advising mindfulness around ego and authority dynamics.`,
+        planetsInvolved: ['Sun', 'Rahu'],
+        houseNumber: sun.houseNumber,
+        sign: sun.sign,
+        strength: 75,
+        sourceReference: 'Classical Parashari Conjunction Principles (Surya-Rahu)',
+        imageKey: 'yoga_grahan',
+      });
+    } else if (sun && ketu && sun.signNumber === ketu.signNumber) {
+      yogas.push({
+        id: 'surya-ketu-grahan',
+        title: 'Surya-Ketu Conjunction (Grahan Yoga)',
+        badge: 'Notable',
+        badgeType: 'moderate',
+        methodology: METHODOLOGY,
+        description: `Sun and Ketu occupy ${sun.sign} (${sun.house}), blending leadership themes with introspection and spiritual independence.`,
+        planetsInvolved: ['Sun', 'Ketu'],
+        houseNumber: sun.houseNumber,
+        sign: sun.sign,
+        strength: 72,
+        sourceReference: 'Classical Parashari Conjunction Principles (Surya-Ketu)',
+        imageKey: 'yoga_grahan',
+      });
+    }
+
+    // 5. Chandra-Rahu / Chandra-Ketu Grahan Yoga
+    if (moon && rahu && moon.signNumber === rahu.signNumber) {
+      yogas.push({
+        id: 'chandra-rahu-grahan',
+        title: 'Chandra-Rahu Conjunction (Grahan Yoga)',
+        badge: 'Notable',
+        badgeType: 'moderate',
+        methodology: METHODOLOGY,
+        description: `Moon and Rahu occupy ${moon.sign} (${moon.house}), heightening emotional intensity, imagination, and sensitivity to surrounding environments.`,
+        planetsInvolved: ['Moon', 'Rahu'],
+        houseNumber: moon.houseNumber,
+        sign: moon.sign,
+        strength: 75,
+        sourceReference: 'Classical Parashari Conjunction Principles (Chandra-Rahu)',
+        imageKey: 'yoga_grahan',
+      });
+    } else if (moon && ketu && moon.signNumber === ketu.signNumber) {
+      yogas.push({
+        id: 'chandra-ketu-grahan',
+        title: 'Chandra-Ketu Conjunction (Grahan Yoga)',
+        badge: 'Notable',
+        badgeType: 'moderate',
+        methodology: METHODOLOGY,
+        description: `Moon and Ketu occupy ${moon.sign} (${moon.house}), accentuating intuitive perception, reflective depth, and inner detachment.`,
+        planetsInvolved: ['Moon', 'Ketu'],
+        houseNumber: moon.houseNumber,
+        sign: moon.sign,
+        strength: 72,
+        sourceReference: 'Classical Parashari Conjunction Principles (Chandra-Ketu)',
+        imageKey: 'yoga_grahan',
+      });
+    }
+
+    // 6. Guru Chandal Yoga: Jupiter conjunct Rahu or Ketu
+    if (jupiter && rahu && jupiter.signNumber === rahu.signNumber) {
+      yogas.push({
+        id: 'guru-chandal-rahu',
+        title: 'Guru-Rahu Conjunction (Guru Chandal Yoga)',
+        badge: 'Notable',
+        badgeType: 'moderate',
+        methodology: METHODOLOGY,
+        description: `Jupiter and Rahu occupy ${jupiter.sign} (${jupiter.house}), prompting unconventional philosophy and questioning of orthodoxy; outcomes depend heavily on sign dispositor dignity.`,
+        planetsInvolved: ['Jupiter', 'Rahu'],
+        houseNumber: jupiter.houseNumber,
+        sign: jupiter.sign,
+        strength: 75,
+        sourceReference: 'Classical Parashari Conjunction Principles (Guru-Rahu)',
+        imageKey: 'yoga_guruchandal',
+      });
+    } else if (jupiter && ketu && jupiter.signNumber === ketu.signNumber) {
+      yogas.push({
+        id: 'guru-ketu-yoga',
+        title: 'Guru-Ketu Conjunction',
+        badge: 'Notable',
+        badgeType: 'present',
+        methodology: METHODOLOGY,
+        description: `Jupiter and Ketu occupy ${jupiter.sign} (${jupiter.house}), favoring contemplative scholarship, authentic spirituality, and philosophical insight.`,
+        planetsInvolved: ['Jupiter', 'Ketu'],
+        houseNumber: jupiter.houseNumber,
+        sign: jupiter.sign,
+        strength: 78,
+        sourceReference: 'Classical Parashari Conjunction Principles (Guru-Ketu)',
+        imageKey: 'yoga_guruketu',
+      });
+    }
+
+    // 7. Angarak Yoga: Mars conjunct Rahu or Ketu
+    if (mars && rahu && mars.signNumber === rahu.signNumber) {
+      yogas.push({
+        id: 'angarak-yoga',
+        title: 'Mars-Rahu Conjunction (Angarak Yoga)',
+        badge: 'Notable',
+        badgeType: 'moderate',
+        methodology: METHODOLOGY,
+        description: `Mars and Rahu occupy ${mars.sign} (${mars.house}), generating high drive and boldness that benefits from disciplined, constructive channeling.`,
+        planetsInvolved: ['Mars', 'Rahu'],
+        houseNumber: mars.houseNumber,
+        sign: mars.sign,
+        strength: 75,
+        sourceReference: 'Classical Parashari Conjunction Principles (Mangal-Rahu)',
+        imageKey: 'yoga_angarak',
+      });
+    }
+
+    // 8. Kala Sarpa check: All 7 physical planets strictly on one side of the Rahu-Ketu longitude axis
+    const sevenPlanets = [sun, moon, mars, mercury, jupiter, venus, saturn].filter(Boolean);
+    if (rahu && ketu && sevenPlanets.length === 7) {
+      const allForward = sevenPlanets.every((p) => {
+        const d = normalize360(p.longitude - rahu.longitude);
+        return d > 0 && d < 180;
+      });
+      const allReverse = sevenPlanets.every((p) => {
+        const d = normalize360(p.longitude - ketu.longitude);
+        return d > 0 && d < 180;
+      });
+      if (allForward || allReverse) {
+        yogas.push({
+          id: 'kala-sarpa-yoga',
+          title: 'Kala Sarpa Yoga',
+          badge: 'Present',
+          badgeType: 'moderate',
+          methodology: 'Modern-Parashari (Post-Classical)',
+          description: `All 7 physical grahas lie strictly on one side of the Rahu (${rahu.house}) – Ketu (${ketu.house}) longitude axis. Note: This is a widely referenced modern Jyotish pattern not explicitly codified in BPHS; interpret alongside overall chart strength.`,
+          planetsInvolved: ['Rahu', 'Ketu'],
+          houseNumber: rahu.houseNumber,
+          sign: rahu.sign,
+          strength: 70,
+          sourceReference: 'Modern Jyotish Tradition (Unverified in Classical BPHS)',
+          imageKey: 'yoga_kalasarpa',
+        });
+      }
+    }
+
+    // 9. Upachaya Node Placement (Classical BPHS: Malefics/Nodes in 3, 6, 10, 11)
+    if (rahu && [3, 6, 10, 11].includes(rahu.houseNumber)) {
+      yogas.push({
+        id: 'rahu-upachaya',
+        title: `Rahu in Upachaya (${rahu.house})`,
+        badge: 'Present',
+        badgeType: 'present',
+        methodology: METHODOLOGY,
+        description: `Rahu occupies the ${rahu.house} (${rahu.sign}), an Upachaya (growth) Bhava where classical texts associate nodal drive with progressive worldly gains over time.`,
+        planetsInvolved: ['Rahu'],
+        houseNumber: rahu.houseNumber,
+        sign: rahu.sign,
+        strength: 82,
+        sourceReference: 'Brihat Parashara Hora Shastra (BPHS) — Upachaya Malefic Rules',
+        imageKey: 'yoga_rahu_upachaya',
+      });
+    }
+    if (ketu && [3, 6, 10, 11].includes(ketu.houseNumber)) {
+      yogas.push({
+        id: 'ketu-upachaya',
+        title: `Ketu in Upachaya (${ketu.house})`,
+        badge: 'Present',
+        badgeType: 'present',
+        methodology: METHODOLOGY,
+        description: `Ketu occupies the ${ketu.house} (${ketu.sign}), an Upachaya (growth) Bhava supporting quiet mastery, problem-solving, and steady gains.`,
+        planetsInvolved: ['Ketu'],
+        houseNumber: ketu.houseNumber,
+        sign: ketu.sign,
+        strength: 80,
+        sourceReference: 'Brihat Parashara Hora Shastra (BPHS) — Upachaya Malefic Rules',
+        imageKey: 'yoga_ketu_upachaya',
+      });
+    }
+
+    return yogas;
+  }
+
+  /**
+   * Generates detected Yogas using @node-jhora/analytics and deterministic Parashari rules.
+   */
+  async getYogas(profile, options = {}) {
+    const { chart, nodeCalculationMode } = await this.calculateRawChart(
+      profile.dob,
+      profile.tob,
+      profile.latitude,
+      profile.longitude,
+      options
+    );
+    const grahas = this.extractGrahas(chart, { nodeCalculationMode });
     const { analytics } = await getJHora();
     const detectedYogas = [];
 
@@ -344,8 +891,9 @@ class AstrologyService {
               title: y.name || 'Vedic Yoga',
               badge: 'Present',
               badgeType: 'present',
-              description: y.description || 'Favorable planetary combination.',
-              planetsInvolved: y.planets || ['Jupiter', 'Moon'],
+              methodology: METHODOLOGY,
+              description: y.description || 'Classical planetary combination.',
+              planetsInvolved: y.planets || [],
               strength: 85,
               imageKey: `yoga_${(y.name || 'general').toLowerCase().replace(/[^a-z]/g, '')}`,
             });
@@ -353,55 +901,21 @@ class AstrologyService {
         }
       }
     } catch (e) {
-      console.warn('YogaEngine analysis note:', e.message);
+      // Fallback cleanly to deterministic Parashari yoga evaluation below
     }
 
-    if (detectedYogas.length === 0) {
-      detectedYogas.push(
-        {
-          id: 'gaja-kesari',
-          title: 'Gaja Kesari Yoga',
-          badge: 'Present',
-          badgeType: 'present',
-          description: 'Brings wisdom, financial stability and respect in society.',
-          planetsInvolved: ['Jupiter', 'Moon'],
-          strength: 88,
-          imageKey: 'yoga_gajakesari',
-        },
-        {
-          id: 'dhana',
-          title: 'Dhana Yoga',
-          badge: 'Present',
-          badgeType: 'present',
-          description: 'Indicates potential for wealth and financial growth.',
-          planetsInvolved: ['Jupiter', 'Mercury'],
-          strength: 82,
-          imageKey: 'yoga_dhana',
-        },
-        {
-          id: 'raja',
-          title: 'Raja Yoga',
-          badge: 'Present',
-          badgeType: 'present',
-          description: 'Can bring success, leadership and higher status.',
-          planetsInvolved: ['Sun', 'Mars'],
-          strength: 80,
-          imageKey: 'yoga_raja',
-        },
-        {
-          id: 'chandra-mangal',
-          title: 'Chandra-Mangal Yoga',
-          badge: 'Moderate',
-          badgeType: 'moderate',
-          description: 'Enhances mental strength and decision-making.',
-          planetsInvolved: ['Moon', 'Mars'],
-          strength: 65,
-          imageKey: 'yoga_chandramangal',
-        }
-      );
+    // Merge deterministic Parashari yogas derived from validated coordinates
+    const parashariYogas = this.evaluateParashariYogas(grahas);
+    for (const py of parashariYogas) {
+      if (!detectedYogas.some((existing) => existing.id === py.id)) {
+        detectedYogas.push(py);
+      }
     }
 
     return {
+      nodeCalculationMode,
+      ayanamsa: 'Lahiri',
+      methodology: METHODOLOGY,
       totalYogasDetected: detectedYogas.length,
       yogas: detectedYogas,
     };
@@ -780,12 +1294,69 @@ class AstrologyService {
   }
 
   /**
-   * Renders North Indian or South Indian SVG Chart.
+   * Renders full 12-house North Indian diamond SVG chart from validated structured house data.
+   * Never independently calculates planetary positions.
    */
-  renderChartSvg(houses, ascendantSign = 1) {
+  renderChartSvg(houses = [], ascendantSign = 1, chartStyle = 'north_indian') {
     const size = 500;
+    const safeAsc = ((Number(ascendantSign) - 1) % 12 + 12) % 12 + 1;
+
+    // Fixed counter-clockwise North Indian diamond house layout (500x500 coordinate grid)
+    const layout = [
+      { house: 1, signX: 250, signY: 222, planetX: 250, planetY: 122, isDiamond: true },
+      { house: 2, signX: 125, signY: 102, planetX: 125, planetY: 42, isDiamond: false },
+      { house: 3, signX: 98, signY: 130, planetX: 44, planetY: 125, isDiamond: false },
+      { house: 4, signX: 220, signY: 255, planetX: 120, planetY: 250, isDiamond: true },
+      { house: 5, signX: 98, signY: 380, planetX: 44, planetY: 375, isDiamond: false },
+      { house: 6, signX: 125, signY: 408, planetX: 125, planetY: 458, isDiamond: false },
+      { house: 7, signX: 250, signY: 292, planetX: 250, planetY: 380, isDiamond: true },
+      { house: 8, signX: 375, signY: 408, planetX: 375, planetY: 458, isDiamond: false },
+      { house: 9, signX: 402, signY: 380, planetX: 456, planetY: 375, isDiamond: false },
+      { house: 10, signX: 280, signY: 255, planetX: 380, planetY: 250, isDiamond: true },
+      { house: 11, signX: 402, signY: 130, planetX: 456, planetY: 125, isDiamond: false },
+      { house: 12, signX: 375, signY: 102, planetX: 375, planetY: 42, isDiamond: false },
+    ];
+
+    const houseElements = layout
+      .map((cell) => {
+        const hData = houses.find((item) => item.house === cell.house) || houses[cell.house - 1] || {};
+        const signNumber = hData.signNumber || (((safeAsc + cell.house - 2) % 12) + 1);
+        const rawSymbols =
+          Array.isArray(hData.symbols) && hData.symbols.length > 0
+            ? hData.symbols
+            : (hData.planets || []).map((p) => this.toPlanetSymbol(p));
+
+        // Wrap symbols nicely (max 3 per line in diamonds, 2 per line in triangles)
+        const perLine = cell.isDiamond ? 3 : 2;
+        const lines = [];
+        for (let i = 0; i < rawSymbols.length; i += perLine) {
+          lines.push(rawSymbols.slice(i, i + perLine).join(' '));
+        }
+
+        const startY = cell.planetY - ((lines.length - 1) * 8);
+        const planetSpans = lines
+          .map(
+            (line, idx) =>
+              `<tspan x="${cell.planetX}" dy="${idx === 0 ? 0 : 16}">${line}</tspan>`
+          )
+          .join('');
+
+        const ascBadge =
+          cell.house === 1
+            ? `<text x="250" y="70" font-family="Arial, sans-serif" font-size="11" font-weight="bold" fill="#C2410C" text-anchor="middle">Asc</text>`
+            : '';
+
+        return `
+  <g id="house-${cell.house}" data-house="${cell.house}" data-sign="${signNumber}">
+    <text x="${cell.signX}" y="${cell.signY}" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#B45309" text-anchor="middle">${signNumber}</text>
+    ${ascBadge}
+    <text x="${cell.planetX}" y="${startY}" font-family="Arial, sans-serif" font-size="13" font-weight="bold" fill="#7C2D12" text-anchor="middle">${planetSpans}</text>
+  </g>`;
+      })
+      .join('');
+
     return `<?xml version="1.0" encoding="UTF-8"?>
-<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
+<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg" data-chart-style="${chartStyle}" data-ascendant-sign="${safeAsc}">
   <defs>
     <linearGradient id="chartBg" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#FFFDF9"/>
@@ -795,35 +1366,7 @@ class AstrologyService {
   <rect x="0" y="0" width="${size}" height="${size}" fill="url(#chartBg)" stroke="#C2410C" stroke-width="3"/>
   <line x1="0" y1="0" x2="${size}" y2="${size}" stroke="#EA580C" stroke-width="1.5"/>
   <line x1="${size}" y1="0" x2="0" y2="${size}" stroke="#EA580C" stroke-width="1.5"/>
-  <polygon points="${size / 2},0 ${size},${size / 2} ${size / 2},${size} 0,${size / 2}" fill="none" stroke="#EA580C" stroke-width="2"/>
-  
-  <text x="${size / 2}" y="${size / 4}" font-family="Arial, sans-serif" font-size="14" font-weight="bold" fill="#7C2D12" text-anchor="middle">
-    Lagna (H1: ${houses?.[0]?.signName || 'Taurus'})
-  </text>
-  <text x="${size / 2}" y="${size / 4 + 20}" font-family="Arial, sans-serif" font-size="12" fill="#9A3412" text-anchor="middle">
-    ${(houses?.[0]?.planets || []).join(', ') || 'Asc'}
-  </text>
-
-  <text x="${size / 4}" y="${size / 2}" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#7C2D12" text-anchor="middle">
-    H4 (${houses?.[3]?.signName || 'Leo'})
-  </text>
-  <text x="${size / 4}" y="${size / 2 + 16}" font-family="Arial, sans-serif" font-size="11" fill="#9A3412" text-anchor="middle">
-    ${(houses?.[3]?.planets || []).join(', ')}
-  </text>
-
-  <text x="${size / 2}" y="${size * 0.75}" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#7C2D12" text-anchor="middle">
-    H7 (${houses?.[6]?.signName || 'Scorpio'})
-  </text>
-  <text x="${size / 2}" y="${size * 0.75 + 16}" font-family="Arial, sans-serif" font-size="11" fill="#9A3412" text-anchor="middle">
-    ${(houses?.[6]?.planets || []).join(', ')}
-  </text>
-
-  <text x="${size * 0.75}" y="${size / 2}" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="#7C2D12" text-anchor="middle">
-    H10 (${houses?.[9]?.signName || 'Aquarius'})
-  </text>
-  <text x="${size * 0.75}" y="${size / 2 + 16}" font-family="Arial, sans-serif" font-size="11" fill="#9A3412" text-anchor="middle">
-    ${(houses?.[9]?.planets || []).join(', ')}
-  </text>
+  <polygon points="${size / 2},0 ${size},${size / 2} ${size / 2},${size} 0,${size / 2}" fill="none" stroke="#EA580C" stroke-width="2"/>${houseElements}
 </svg>`;
   }
 

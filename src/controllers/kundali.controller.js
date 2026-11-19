@@ -29,8 +29,9 @@ class KundaliController {
     try {
       const profile = await this.resolveProfile(req);
       const chartStyle = req.query.chartStyle || 'north_indian';
+      const nodeCalculationMode = (req.query.nodeCalculationMode || req.query.nodeMode || 'MEAN').toUpperCase();
       const hostUrl = `${req.protocol}://${req.get('host')}`;
-      const overview = await astrologyService.getKundaliOverview(profile, chartStyle, hostUrl);
+      const overview = await astrologyService.getKundaliOverview(profile, chartStyle, hostUrl, { nodeCalculationMode });
       return success(res, overview, 'Kundali overview fetched successfully', 200);
     } catch (err) {
       next(err);
@@ -40,22 +41,46 @@ class KundaliController {
   async getGrahas(req, res, next) {
     try {
       const profile = await this.resolveProfile(req);
-      const { chart } = await astrologyService.calculateRawChart(profile.dob, profile.tob, profile.latitude, profile.longitude);
-      const grahas = astrologyService.extractGrahas(chart).map((g) => ({
+      const nodeCalculationMode = (req.query.nodeCalculationMode || req.query.nodeMode || 'MEAN').toUpperCase();
+      const { chart } = await astrologyService.calculateRawChart(
+        profile.dob,
+        profile.tob,
+        profile.latitude,
+        profile.longitude,
+        { nodeCalculationMode }
+      );
+      const grahas = astrologyService.extractGrahas(chart, { nodeCalculationMode }).map((g) => ({
         id: g.id,
+        planet: g.planet,
         name: g.name,
         sign: g.sign,
         signSanskrit: g.signSanskrit,
         house: g.house,
         houseNumber: g.houseNumber,
         degree: g.degree,
+        degreeInRashi: g.degreeInRashi,
+        rashiNumber: g.rashiNumber,
+        rashiName: g.rashiName,
         isRetrograde: g.isRetrograde,
         isCombust: g.isCombust,
         dignity: g.dignity,
         nakshatra: g.nakshatra,
+        pada: g.pada,
+        longitude: g.longitude,
         imageKey: g.imageKey,
+        nodeType: g.nodeType,
+        ayanamsa: g.ayanamsa,
       }));
-      return success(res, { grahas }, 'Graha positions fetched successfully', 200);
+      return success(
+        res,
+        {
+          nodeCalculationMode,
+          ayanamsa: 'Lahiri',
+          grahas,
+        },
+        'Graha positions fetched successfully',
+        200
+      );
     } catch (err) {
       next(err);
     }
@@ -64,10 +89,31 @@ class KundaliController {
   async getBhavas(req, res, next) {
     try {
       const profile = await this.resolveProfile(req);
-      const { chart } = await astrologyService.calculateRawChart(profile.dob, profile.tob, profile.latitude, profile.longitude);
-      const grahas = astrologyService.extractGrahas(chart);
+      const nodeCalculationMode = (req.query.nodeCalculationMode || req.query.nodeMode || 'MEAN').toUpperCase();
+      const { chart } = await astrologyService.calculateRawChart(
+        profile.dob,
+        profile.tob,
+        profile.latitude,
+        profile.longitude,
+        { nodeCalculationMode }
+      );
+      const grahas = astrologyService.extractGrahas(chart, { nodeCalculationMode });
+      const ascSignIndex = Math.floor((chart.ascendant || 0) / 30);
       const bhavas = astrologyService.extractBhavas(chart, grahas);
-      return success(res, { bhavas }, 'Bhavas fetched successfully', 200);
+      const rahuKetuAnalysis = astrologyService.buildRahuKetuBhavaAnalysis(grahas, ascSignIndex);
+
+      return success(
+        res,
+        {
+          nodeCalculationMode,
+          ayanamsa: 'Lahiri',
+          methodology: 'Parashari',
+          bhavas,
+          rahuKetuAnalysis,
+        },
+        'Bhavas fetched successfully',
+        200
+      );
     } catch (err) {
       next(err);
     }
@@ -87,7 +133,8 @@ class KundaliController {
   async getYogas(req, res, next) {
     try {
       const profile = await this.resolveProfile(req);
-      const yogas = await astrologyService.getYogas(profile);
+      const nodeCalculationMode = (req.query.nodeCalculationMode || req.query.nodeMode || 'MEAN').toUpperCase();
+      const yogas = await astrologyService.getYogas(profile, { nodeCalculationMode });
       return success(res, yogas, 'Yogas fetched successfully', 200);
     } catch (err) {
       next(err);
@@ -123,23 +170,21 @@ class KundaliController {
         };
       }
 
-      const { chart } = await astrologyService.calculateRawChart(profile.dob, profile.tob, profile.latitude, profile.longitude);
-      const grahas = astrologyService.extractGrahas(chart);
+      const nodeCalculationMode = (req.query.nodeCalculationMode || req.query.nodeMode || 'MEAN').toUpperCase();
+      const chartStyle = req.query.chartStyle || 'north_indian';
+
+      const { chart } = await astrologyService.calculateRawChart(
+        profile.dob,
+        profile.tob,
+        profile.latitude,
+        profile.longitude,
+        { nodeCalculationMode }
+      );
+      const grahas = astrologyService.extractGrahas(chart, { nodeCalculationMode });
       const ascSignIdx = Math.floor((chart.ascendant || 0) / 30);
+      const houses = astrologyService.buildWholeSignHouses(grahas, ascSignIdx);
 
-      const houses = [];
-      for (let h = 1; h <= 12; h++) {
-        const sIdx = (ascSignIdx + (h - 1)) % 12;
-        const planets = grahas.filter((g) => g.houseNumber === h).map((g) => g.name.split(' ')[0]);
-        houses.push({
-          house: h,
-          signNumber: sIdx + 1,
-          signName: grahas.find((g) => g.signNumber === sIdx + 1)?.signName || 'Aries',
-          planets,
-        });
-      }
-
-      const svg = astrologyService.renderChartSvg(houses, ascSignIdx + 1);
+      const svg = astrologyService.renderChartSvg(houses, ascSignIdx + 1, chartStyle);
       res.setHeader('Content-Type', 'image/svg+xml');
       return res.send(svg);
     } catch (err) {

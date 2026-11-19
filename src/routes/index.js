@@ -7,7 +7,6 @@ const kundaliRoutes = require('./kundali.routes');
 const matchmakingRoutes = require('./matchmaking.routes');
 const guidanceRoutes = require('./guidance.routes');
 const reportRoutes = require('./report.routes');
-const botRoutes = require('./bot.routes');
 const locationRoutes = require('./location.routes');
 const userRoutes = require('./user.routes');
 const authenticate = require('../middlewares/auth.middleware');
@@ -33,7 +32,20 @@ router.use('/kundali', kundaliRoutes);
 router.use('/matchmaking', matchmakingRoutes);
 router.use('/guidance', guidanceRoutes);
 router.use('/reports', reportRoutes);
-router.use('/bot', botRoutes);
+// AI Bot Context API closed by configuration (disabled unless ENABLE_AI_BOT=true)
+if (process.env.ENABLE_AI_BOT === 'true') {
+  const botRoutes = require('./bot.routes');
+  router.use('/bot', botRoutes);
+} else {
+  router.use('/bot', (req, res) => {
+    return res.status(503).json({
+      success: false,
+      message: 'AI Bot Context API is currently closed and disabled.',
+      data: null,
+      timestamp: new Date().toISOString(),
+    });
+  });
+}
 router.use('/locations', locationRoutes);
 
 // Compatibility route
