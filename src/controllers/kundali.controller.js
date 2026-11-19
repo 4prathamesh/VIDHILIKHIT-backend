@@ -70,6 +70,18 @@ class KundaliController {
         imageKey: g.imageKey,
         nodeType: g.nodeType,
         ayanamsa: g.ayanamsa,
+        // Phase 1 Additive Fields per Spec Section 3.2
+        signLord: g.signLord,
+        nakshatraLord: g.nakshatraLord,
+        nakshatraPada: g.nakshatraPada,
+        longitudeDegrees: g.longitudeDegrees,
+        latitudeDegrees: g.latitudeDegrees,
+        dailyMotionDegrees: g.dailyMotionDegrees,
+        isExalted: g.isExalted,
+        isDebilitated: g.isDebilitated,
+        isOwnSign: g.isOwnSign,
+        isMoolatrikona: g.isMoolatrikona,
+        combustion: g.combustion,
       }));
       return success(
         res,

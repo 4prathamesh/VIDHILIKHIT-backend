@@ -302,55 +302,62 @@ const collection = {
       ],
     },
     {
-      name: 'Flow 4: My Kundali (Calculations & Charts)',
+      name: 'Flow 4: My Kundali (Calculations & Charts - Phase 1 Enhanced)',
       item: [
         {
-          name: '4.1 Kundali Overview & Chart',
+          name: '4.1 Kundali Overview & Chart (Includes Panchang, Avakhada, BirthDetails)',
           request: {
             method: 'GET',
             header: [],
             url: {
-              raw: '{{baseUrl}}/kundali/overview?chartStyle=north&profileId={{profileId}}',
+              raw: '{{baseUrl}}/kundali/overview?chartStyle=north_indian&profileId={{profileId}}&nodeCalculationMode=MEAN',
               host: ['{{baseUrl}}'],
               path: ['kundali', 'overview'],
               query: [
-                { key: 'chartStyle', value: 'north' },
+                { key: 'chartStyle', value: 'north_indian', description: 'north_indian or south_indian' },
                 { key: 'profileId', value: '{{profileId}}' },
+                { key: 'nodeCalculationMode', value: 'MEAN', description: 'MEAN or TRUE node calculation' },
               ],
             },
-            description: 'Calculates Ascendant, Moon sign, Nakshatra, D1 chart house placements, and rendered SVG diagram URL.',
+            description: 'Returns profile, summary (rashi, nakshatra, lagna), D1 whole-sign chart with SVG URL, and Phase 1 additive objects: birthDetails (gender, ISO dates, UTC birth datetime, structured place), panchang (tithi name/number/paksha, karana, yoga, nakshatra lord/pada, sunrise/sunset, ayanamsa), avakhada (varna, vashya, yoni, gana, nadi, rashi, rashiLord, charan, tatva, nameAlphabet, paya, yunja), and calculation metadata.',
           },
         },
         {
-          name: '4.2 Graha Positions (9 Planets)',
+          name: '4.2 Graha Positions (9 Planets with Speeds, Lords & Dignity Booleans)',
           request: {
             method: 'GET',
             header: [],
             url: {
-              raw: '{{baseUrl}}/kundali/grahas?profileId={{profileId}}',
+              raw: '{{baseUrl}}/kundali/grahas?profileId={{profileId}}&nodeCalculationMode=MEAN',
               host: ['{{baseUrl}}'],
               path: ['kundali', 'grahas'],
-              query: [{ key: 'profileId', value: '{{profileId}}' }],
+              query: [
+                { key: 'profileId', value: '{{profileId}}' },
+                { key: 'nodeCalculationMode', value: 'MEAN', description: 'MEAN or TRUE node calculation' },
+              ],
             },
-            description: 'Returns real ephemeris positions for 9 grahas (Sun, Moon, Mars, Mercury, Jupiter, Venus, Saturn, Rahu, Ketu) with retrograde, combustion, and dignities.',
+            description: 'Returns real ephemeris positions for all 9 grahas (Sun through Ketu). Includes Phase 1 additive fields: signLord, nakshatraLord, nakshatraPada, longitudeDegrees, latitudeDegrees, dailyMotionDegrees (speed), isExalted, isDebilitated, isOwnSign, isMoolatrikona booleans, and structured combustion object with orbDegrees.',
           },
         },
         {
-          name: '4.3 Bhavas (12 Houses Analysis)',
+          name: '4.3 Bhavas (12 Houses with Cusps, House Lords, Aspects & Strength)',
           request: {
             method: 'GET',
             header: [],
             url: {
-              raw: '{{baseUrl}}/kundali/bhavas?profileId={{profileId}}',
+              raw: '{{baseUrl}}/kundali/bhavas?profileId={{profileId}}&nodeCalculationMode=MEAN',
               host: ['{{baseUrl}}'],
               path: ['kundali', 'bhavas'],
-              query: [{ key: 'profileId', value: '{{profileId}}' }],
+              query: [
+                { key: 'profileId', value: '{{profileId}}' },
+                { key: 'nodeCalculationMode', value: 'MEAN', description: 'MEAN or TRUE node calculation' },
+              ],
             },
-            description: 'Analyzes all 12 houses (bhavas), their lords, resident grahas, aspects, and sign placement.',
+            description: 'Analyzes all 12 houses (bhavas), resident grahas, Parashari Rahu/Ketu analysis, and Phase 1 additive fields: cusp (longitudeDegrees, degreeInSign), houseLord (planet, houseNumber, sign), aspects (grahas casting Drishti), strength (total, rupas, ratio, rank), and interpretation (summary, positiveFactors, challengeFactors).',
           },
         },
         {
-          name: '4.4 Vargas (Divisional Charts D1-D12)',
+          name: '4.4 Vargas (Complete 18 Shodashavarga Charts D1-D60)',
           request: {
             method: 'GET',
             header: [],
@@ -360,25 +367,28 @@ const collection = {
               path: ['kundali', 'vargas'],
               query: [{ key: 'profileId', value: '{{profileId}}' }],
             },
-            description: 'Returns divisional charts D1 (Rashi), D4 (Chaturthamsa), D7 (Saptamsa), D9 (Navamsha), D10 (Dashamsha), and D12 (Dwadasamsa).',
+            description: 'Returns all 18 Parashari Shodashavarga divisional charts: D1 (Rashi), D2 (Hora), D3 (Drekkana), D4 (Chaturthamsha), D6 (Shashtamsha), D7 (Saptamsha), D8 (Ashtamsha), D9 (Navamsha), D10 (Dashamsha), D12 (Dwadashamsha), D16 (Shodasamsha), D20 (Vimsamsha), D24 (Chaturvimshamsha), D27 (Saptavimshamsha), D30 (Trimsamsha), D40 (Khavedamsha), D45 (Akshavedamsha), and D60 (Shashtiamsha), each with chartSvg, chartData, and calculationStatus.',
           },
         },
         {
-          name: '4.5 Yogas (Planetary Combinations)',
+          name: '4.5 Yogas (Planetary Combinations with Conditions & Evidence)',
           request: {
             method: 'GET',
             header: [],
             url: {
-              raw: '{{baseUrl}}/kundali/yogas?profileId={{profileId}}',
+              raw: '{{baseUrl}}/kundali/yogas?profileId={{profileId}}&nodeCalculationMode=MEAN',
               host: ['{{baseUrl}}'],
               path: ['kundali', 'yogas'],
-              query: [{ key: 'profileId', value: '{{profileId}}' }],
+              query: [
+                { key: 'profileId', value: '{{profileId}}' },
+                { key: 'nodeCalculationMode', value: 'MEAN' },
+              ],
             },
-            description: 'Detects classical Vedic planetary yogas (Raja, Dhana, Gajakesari, Budhaditya, etc.) with description and strength.',
+            description: 'Detects classical Vedic planetary yogas (Gaja Kesari, Budhaditya, Chandra-Mangal, Raja, Upachaya, etc.). Includes Phase 1 additive fields: ruleCode, conditions array with evidence (planet, referencePlanet, houseDistance), housesInvolved array, structured interpretation (positiveIndications, cautions), and calculationStatus.',
           },
         },
         {
-          name: '4.6 Dasha (Vimshottari Timeline)',
+          name: '4.6 Dasha (Vimshottari Lifecycle Timeline & Birth Balance)',
           request: {
             method: 'GET',
             header: [],
@@ -388,7 +398,7 @@ const collection = {
               path: ['kundali', 'dasha'],
               query: [{ key: 'profileId', value: '{{profileId}}' }],
             },
-            description: 'Computes exact 120-year Vimshottari Mahadasha timeline with active Antardashas and Pratyantardashas.',
+            description: 'Returns currentMahadasha, currentAntardasha, upcomingAntardashas, plus Phase 1 additive full 120-year mahadashas array (with nested antardashas and isCurrent status) and timeline object (birthNakshatra, birthNakshatraLord, balanceAtBirth: planet, years, months, days).',
           },
         },
         {
@@ -397,15 +407,16 @@ const collection = {
             method: 'GET',
             header: [],
             url: {
-              raw: '{{baseUrl}}/kundali/chart-render/d1.svg?chartStyle=north&profileId={{profileId}}',
+              raw: '{{baseUrl}}/kundali/chart-render/d1.svg?chartStyle=north_indian&profileId={{profileId}}&nodeCalculationMode=MEAN',
               host: ['{{baseUrl}}'],
               path: ['kundali', 'chart-render', 'd1.svg'],
               query: [
-                { key: 'chartStyle', value: 'north' },
+                { key: 'chartStyle', value: 'north_indian' },
                 { key: 'profileId', value: '{{profileId}}' },
+                { key: 'nodeCalculationMode', value: 'MEAN' },
               ],
             },
-            description: 'Returns a standalone SVG vector diagram of the North or South Indian chart.',
+            description: 'Returns a standalone North Indian 12-house SVG vector diagram with exact zodiac sign numbers in each house cell and astrological planet symbols.',
           },
         },
       ],
