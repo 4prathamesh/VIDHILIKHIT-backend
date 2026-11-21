@@ -921,6 +921,155 @@ const collection = {
         },
       ],
     },
+    {
+      name: 'Flow 11: Numerology Module (Chaldean & Sankhya Shastra)',
+      item: [
+        {
+          name: '11.1 Calculate Numerology Profile',
+          request: {
+            method: 'POST',
+            header: [{ key: 'Content-Type', value: 'application/json' }],
+            body: {
+              mode: 'raw',
+              raw: JSON.stringify(
+                {
+                  fullName: 'Arjun Sharma',
+                  dob: '1999-07-29',
+                  targetYear: 2026,
+                  system: 'chaldean',
+                  isTransliterationConfirmed: true,
+                },
+                null,
+                2
+              ),
+            },
+            url: {
+              raw: '{{baseUrl}}/numerology/calculate',
+              host: ['{{baseUrl}}'],
+              path: ['numerology', 'calculate'],
+            },
+            description: 'Computes Mulank (Birth Number), Bhagyank (Destiny Number), Namank (Name Number in Chaldean), and Personal Cycles (Year, Month, Day). Powers Screen 3 & 4.',
+          },
+        },
+        {
+          name: '11.2 Get Active Numerology Profile',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/numerology/profile?profileId={{profileId}}',
+              host: ['{{baseUrl}}'],
+              path: ['numerology', 'profile'],
+              query: [{ key: 'profileId', value: '{{profileId}}' }],
+            },
+            description: 'Fetches active profile Golden Trio (Destiny, Birth, Name numbers) and active cycles for Screen 4.',
+          },
+        },
+        {
+          name: '11.3 Destiny Number Deep Analysis',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/numerology/destiny/2',
+              host: ['{{baseUrl}}'],
+              path: ['numerology', 'destiny', '2'],
+            },
+            description: 'Provides attributes, planetary ruler, favourable numbers, days, colors, gemstones, strengths, challenges, and Kundali synergy for any root number (1-9). Powers Screen 5.',
+          },
+        },
+        {
+          name: '11.4 Core Numbers Summary',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/numerology/core-numbers?profileId={{profileId}}',
+              host: ['{{baseUrl}}'],
+              path: ['numerology', 'core-numbers'],
+              query: [{ key: 'profileId', value: '{{profileId}}' }],
+            },
+            description: 'Returns all 6 core numbers (Birth, Destiny, Name, Personal Year, Personal Month, Personal Day) with compound reductions for Screen 6.',
+          },
+        },
+        {
+          name: '11.5 Calculation Breakdown',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/numerology/calculation-breakdown?fullName=Arjun+Sharma&dob=1999-07-29&system=chaldean',
+              host: ['{{baseUrl}}'],
+              path: ['numerology', 'calculation-breakdown'],
+              query: [
+                { key: 'fullName', value: 'Arjun Sharma' },
+                { key: 'dob', value: '1999-07-29' },
+                { key: 'system', value: 'chaldean' },
+              ],
+            },
+            description: 'Delivers letter-by-letter Chaldean numeric values and step-by-step Destiny addition formulas for Screen 7.',
+          },
+        },
+        {
+          name: '11.6 Personal Cycles & Multi-Year Forecast',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/numerology/personal-cycles?dob=1999-07-29&year=2026',
+              host: ['{{baseUrl}}'],
+              path: ['numerology', 'personal-cycles'],
+              query: [
+                { key: 'dob', value: '1999-07-29' },
+                { key: 'year', value: '2026' },
+              ],
+            },
+            description: 'Returns active Personal Year, Month, and Day cycles, and a 6-year multi-year forecast for Screen 8.',
+          },
+        },
+        {
+          name: '11.7 Numerology & Kundali Planetary Synergy',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/numerology/kundali-alignment?profileId={{profileId}}',
+              host: ['{{baseUrl}}'],
+              path: ['numerology', 'kundali-alignment'],
+              query: [{ key: 'profileId', value: '{{profileId}}' }],
+            },
+            description: 'Cross-analyzes user Destiny Number ruling planet with their Vedic Kundali planetary placements and Bhava lords for Screen 9.',
+          },
+        },
+        {
+          name: '11.8 Numerology Compatibility Analysis',
+          request: {
+            method: 'POST',
+            header: [{ key: 'Content-Type', value: 'application/json' }],
+            body: {
+              mode: 'raw',
+              raw: JSON.stringify(
+                {
+                  yourName: 'Arjun Sharma',
+                  partnerName: 'Kavya Mehta',
+                  yourDob: '1999-07-29',
+                  partnerDob: '2000-11-14',
+                  relationshipType: 'romantic',
+                },
+                null,
+                2
+              ),
+            },
+            url: {
+              raw: '{{baseUrl}}/numerology/compatibility',
+              host: ['{{baseUrl}}'],
+              path: ['numerology', 'compatibility'],
+            },
+            description: 'Computes numerological compatibility across the 3 Pillars of Harmony (Emotional, Intellectual, Long-Term Vision) for Screen 10.',
+          },
+        },
+      ],
+    },
   ],
 };
 
