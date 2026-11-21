@@ -1428,39 +1428,203 @@ class AstrologyService {
     const { chart: c1 } = await this.calculateRawChart(person1.dob, person1.tob, person1.latitude, person1.longitude);
     const { chart: c2 } = await this.calculateRawChart(person2.dob, person2.tob, person2.latitude, person2.longitude);
 
-    const m1Lon = c1.planets?.[1]?.longitude || 108.2;
-    const m2Lon = c2.planets?.[1]?.longitude || 52.6;
+    const m1 = c1.planets?.find((p) => p.id === 1 || (p.name && p.name.toLowerCase() === 'moon'));
+    const m2 = c2.planets?.find((p) => p.id === 1 || (p.name && p.name.toLowerCase() === 'moon'));
+    const m1Lon = m1?.longitude !== undefined ? normalize360(m1.longitude) : 108.2;
+    const m2Lon = m2?.longitude !== undefined ? normalize360(m2.longitude) : 52.6;
 
     const s1Idx = Math.floor(m1Lon / 30);
     const s2Idx = Math.floor(m2Lon / 30);
     const n1Idx = Math.floor(m1Lon / (360 / 27));
     const n2Idx = Math.floor(m2Lon / (360 / 27));
 
-    // Ashtakoota 8 Kootas calculation
-    const varnaPoints = (s1Idx % 4 === s2Idx % 4 || s1Idx >= s2Idx) ? 1 : 0;
-    const vashyaPoints = 2;
-    const taraDist = (Math.abs(n1Idx - n2Idx) % 9);
-    const taraPoints = (taraDist === 3 || taraDist === 5 || taraDist === 7) ? 1.5 : 3;
-    const yoniPoints = 3;
-    const maitriPoints = 4;
-    const ganaPoints = 5;
-    const bhakootDist = Math.abs(s1Idx - s2Idx);
-    const bhakootPoints = ([1, 6, 8].includes(bhakootDist)) ? 0 : 7;
-    const nadiPoints = (n1Idx % 3 !== n2Idx % 3) ? 8 : 0;
+    // Determine groom and bride roles for gender-directional Vedic rules
+    const p1IsFemale = person1.gender === 'female';
+    const groomIdx = p1IsFemale ? 2 : 1;
+    const gLon = groomIdx === 1 ? m1Lon : m2Lon;
+    const bLon = groomIdx === 1 ? m2Lon : m1Lon;
+    const gSignIdx = Math.floor(gLon / 30);
+    const bSignIdx = Math.floor(bLon / 30);
+    const gNakIdx = Math.floor(gLon / (360 / 27));
+    const bNakIdx = Math.floor(bLon / (360 / 27));
+    const gPada = Math.floor((gLon % (360 / 27)) / ((360 / 27) / 4)) + 1;
+    const bPada = Math.floor((bLon % (360 / 27)) / ((360 / 27) / 4)) + 1;
 
-    const gunasObtained = Math.round(varnaPoints + vashyaPoints + taraPoints + yoniPoints + maitriPoints + ganaPoints + bhakootPoints + nadiPoints);
+    const gSign = ZODIAC_SIGNS[gSignIdx] || ZODIAC_SIGNS[0];
+    const bSign = ZODIAC_SIGNS[bSignIdx] || ZODIAC_SIGNS[0];
+    const gNak = NAKSHATRAS[gNakIdx % 27] || NAKSHATRAS[0];
+    const bNak = NAKSHATRAS[bNakIdx % 27] || NAKSHATRAS[0];
+
+    const gAv = calculateAvakhada(gLon, gNak, gPada, gSign, Math.floor((c1.ascendant || 0) / 30));
+    const bAv = calculateAvakhada(bLon, bNak, bPada, bSign, Math.floor((c2.ascendant || 0) / 30));
+
+    // Classical Ashtakoota 8 Kootas
+    // 1. Varna (1 Point)
+    const VARNA_RANKS = { Brahmin: 4, Kshatriya: 3, Vaishya: 2, Shudra: 1 };
+    const gVarnaRank = VARNA_RANKS[gAv.varna] || 3;
+    const bVarnaRank = VARNA_RANKS[bAv.varna] || 3;
+    const varnaPoints = gVarnaRank >= bVarnaRank ? 1 : 0;
+
+    // 2. Vashya (2 Points)
+    let vashyaPoints = 1;
+    if (gAv.vashya === bAv.vashya) {
+      vashyaPoints = 2;
+    } else if (gAv.vashya === 'Vanachara' || bAv.vashya === 'Vanachara') {
+      vashyaPoints = 0;
+    } else if (gAv.vashya === 'Nara' && (bAv.vashya === 'Chatushpada' || bAv.vashya === 'Jalachara')) {
+      vashyaPoints = 1;
+    } else if (bAv.vashya === 'Nara' && (gAv.vashya === 'Chatushpada' || gAv.vashya === 'Jalachara')) {
+      vashyaPoints = 1;
+    } else if (gAv.vashya === 'Keeta' || bAv.vashya === 'Keeta') {
+      vashyaPoints = 0.5;
+    }
+
+    // 3. Tara / Dina (3 Points)
+    const taraFromBride = (((gNakIdx - bNakIdx + 27) % 9) + 1);
+    const taraFromGroom = (((bNakIdx - gNakIdx + 27) % 9) + 1);
+    const inauspiciousTaras = [3, 5, 7];
+    const gGood = !inauspiciousTaras.includes(taraFromBride);
+    const bGood = !inauspiciousTaras.includes(taraFromGroom);
+    const taraPoints = (gGood && bGood) ? 3 : (gGood || bGood) ? 1.5 : 0;
+
+    // 4. Yoni (4 Points)
+    const YONI_ENEMIES = {
+      Horse: 'Buffalo', Buffalo: 'Horse',
+      Elephant: 'Lion', Lion: 'Elephant',
+      Sheep: 'Monkey', Monkey: 'Sheep',
+      Serpent: 'Mongoose', Mongoose: 'Serpent',
+      Dog: 'Deer', Shwan: 'Deer', Deer: 'Dog',
+      Cat: 'Rat', Rat: 'Cat',
+      Cow: 'Tiger', Tiger: 'Cow',
+    };
+    let yoniPoints = 2;
+    if (gAv.yoni === bAv.yoni) {
+      yoniPoints = 4;
+    } else if (YONI_ENEMIES[gAv.yoni] === bAv.yoni || YONI_ENEMIES[bAv.yoni] === gAv.yoni) {
+      yoniPoints = 0;
+    } else if (['Horse', 'Deer'].includes(gAv.yoni) && ['Horse', 'Deer'].includes(bAv.yoni)) {
+      yoniPoints = 3;
+    } else if (['Cow', 'Buffalo'].includes(gAv.yoni) && ['Cow', 'Buffalo'].includes(bAv.yoni)) {
+      yoniPoints = 3;
+    }
+
+    // 5. Graha Maitri (5 Points)
+    const PLANETARY_FRIENDSHIP = {
+      Sun: { friends: ['Moon', 'Mars', 'Jupiter'], neutrals: ['Mercury'], enemies: ['Venus', 'Saturn'] },
+      Moon: { friends: ['Sun', 'Mercury'], neutrals: ['Mars', 'Jupiter', 'Venus', 'Saturn'], enemies: [] },
+      Mars: { friends: ['Sun', 'Moon', 'Jupiter'], neutrals: ['Venus', 'Saturn'], enemies: ['Mercury'] },
+      Mercury: { friends: ['Sun', 'Venus'], neutrals: ['Mars', 'Jupiter', 'Saturn'], enemies: ['Moon'] },
+      Jupiter: { friends: ['Sun', 'Moon', 'Mars'], neutrals: ['Saturn'], enemies: ['Mercury', 'Venus'] },
+      Venus: { friends: ['Mercury', 'Saturn'], neutrals: ['Mars', 'Jupiter'], enemies: ['Sun', 'Moon'] },
+      Saturn: { friends: ['Mercury', 'Venus'], neutrals: ['Jupiter'], enemies: ['Sun', 'Moon', 'Mars'] },
+    };
+    const gLord = gSign.lord;
+    const bLord = bSign.lord;
+    let maitriPoints = 3;
+    if (gLord === bLord) {
+      maitriPoints = 5;
+    } else {
+      const p1 = PLANETARY_FRIENDSHIP[gLord] || { friends: [], neutrals: [], enemies: [] };
+      const p2 = PLANETARY_FRIENDSHIP[bLord] || { friends: [], neutrals: [], enemies: [] };
+      const r1 = p1.friends.includes(bLord) ? 'F' : p1.enemies.includes(bLord) ? 'E' : 'N';
+      const r2 = p2.friends.includes(gLord) ? 'F' : p2.enemies.includes(gLord) ? 'E' : 'N';
+      if (r1 === 'F' && r2 === 'F') maitriPoints = 5;
+      else if ((r1 === 'F' && r2 === 'N') || (r1 === 'N' && r2 === 'F')) maitriPoints = 4;
+      else if (r1 === 'N' && r2 === 'N') maitriPoints = 3;
+      else if ((r1 === 'F' && r2 === 'E') || (r1 === 'E' && r2 === 'F')) maitriPoints = 1;
+      else if ((r1 === 'N' && r2 === 'E') || (r1 === 'E' && r2 === 'N')) maitriPoints = 0.5;
+      else maitriPoints = 0;
+    }
+
+    // 6. Gana (6 Points)
+    let ganaPoints = 0;
+    if (gAv.gana === bAv.gana) {
+      ganaPoints = 6;
+    } else if (gAv.gana === 'Deva' && bAv.gana === 'Manushya') {
+      ganaPoints = 6;
+    } else if (gAv.gana === 'Manushya' && bAv.gana === 'Deva') {
+      ganaPoints = 5;
+    } else if (gAv.gana === 'Deva' && bAv.gana === 'Rakshasa') {
+      ganaPoints = 1;
+    } else {
+      ganaPoints = 0;
+    }
+
+    // 7. Bhakoot (7 Points)
+    const diffFromBride = ((gSignIdx - bSignIdx + 12) % 12) + 1;
+    let bhakootPoints = 0;
+    if ([1, 7, 3, 11, 4, 10, 5, 9].includes(diffFromBride)) {
+      bhakootPoints = 7;
+    } else if (gLord === bLord || (PLANETARY_FRIENDSHIP[gLord] && PLANETARY_FRIENDSHIP[gLord].friends.includes(bLord))) {
+      // Bhakoot Dosha cancellation
+      bhakootPoints = 7;
+    } else {
+      bhakootPoints = 0;
+    }
+
+    // 8. Nadi (8 Points)
+    let nadiPoints = 0;
+    if (gAv.nadi !== bAv.nadi) {
+      nadiPoints = 8;
+    } else if (gSignIdx === bSignIdx && gNakIdx !== bNakIdx) {
+      nadiPoints = 8; // Cancelled if same sign different nakshatra
+    } else if (gNakIdx === bNakIdx && gSignIdx !== bSignIdx) {
+      nadiPoints = 8; // Cancelled if same nakshatra across sign border
+    } else if (gNakIdx === bNakIdx && gPada !== bPada) {
+      nadiPoints = 8; // Cancelled if different pada
+    } else {
+      nadiPoints = 0;
+    }
+
+    const gunasObtained = Number((varnaPoints + vashyaPoints + taraPoints + yoniPoints + maitriPoints + ganaPoints + bhakootPoints + nadiPoints).toFixed(1));
     const percentage = `${Math.round((gunasObtained / 36) * 100)}%`;
 
     // Manglik Check: Mars in houses 1, 2, 4, 7, 8, 12 from Lagna
     const asc1Idx = Math.floor((c1.ascendant || 0) / 30);
-    const mars1Idx = Math.floor((c1.planets?.[4]?.longitude || 0) / 30);
+    const mars1 = c1.planets?.find((p) => p.id === 4 || (p.name && p.name.toLowerCase().startsWith('mar')));
+    const mars1Idx = Math.floor((mars1?.longitude || 0) / 30);
     const mars1House = ((mars1Idx - asc1Idx + 12) % 12) + 1;
     const person1Manglik = [1, 2, 4, 7, 8, 12].includes(mars1House);
 
     const asc2Idx = Math.floor((c2.ascendant || 0) / 30);
-    const mars2Idx = Math.floor((c2.planets?.[4]?.longitude || 0) / 30);
+    const mars2 = c2.planets?.find((p) => p.id === 4 || (p.name && p.name.toLowerCase().startsWith('mar')));
+    const mars2Idx = Math.floor((mars2?.longitude || 0) / 30);
     const mars2House = ((mars2Idx - asc2Idx + 12) % 12) + 1;
     const person2Manglik = [1, 2, 4, 7, 8, 12].includes(mars2House);
+
+    // Dynamic Scores for Highlights and Detailed Aspects
+    const emotionalScore = Math.max(30, Math.min(99, Math.round((bhakootPoints / 7 * 55) + (maitriPoints / 5 * 45))));
+    const mentalScore = Math.max(30, Math.min(99, Math.round((maitriPoints / 5 * 65) + (taraPoints / 3 * 35))));
+    const valuesScore = Math.max(35, Math.min(99, Math.round((varnaPoints / 1 * 40) + (ganaPoints / 6 * 60))));
+    const manglikPenalty = (person1Manglik !== person2Manglik) ? 8 : 0;
+    const marriageScore = Math.max(25, Math.min(99, Math.round((gunasObtained / 36 * 100) - manglikPenalty)));
+    const financialScore = Math.max(30, Math.min(99, Math.round((bhakootPoints / 7 * 65) + (vashyaPoints / 2 * 35))));
+    const physicalScore = Math.max(20, Math.min(99, Math.round(yoniPoints / 4 * 100)));
+    const harmonyScore = Math.max(30, Math.min(99, Math.round((nadiPoints / 8 * 60) + (ganaPoints / 6 * 40))));
+
+    const emotionalDesc = emotionalScore >= 75
+      ? 'Strong emotional understanding and profound natural support.'
+      : emotionalScore >= 50
+      ? 'Balanced emotional rapport with occasional differing perspectives.'
+      : 'Sensitive emotional dynamics requiring extra patience and listening.';
+
+    const valuesDesc = valuesScore >= 75
+      ? 'Deeply shared family ethics, cultural traditions and life goals.'
+      : valuesScore >= 50
+      ? 'Moderate alignment on principles with complementary individual viewpoints.'
+      : 'Divergent personal values; constructive dialogue will foster alignment.';
+
+    const marriageDesc = marriageScore >= 75
+      ? 'Highly auspicious planetary alignment promising stability and mutual growth.'
+      : marriageScore >= 50
+      ? 'Positive prospects for marriage supported by consistent effort and understanding.'
+      : 'Planetary adjustments indicated; recommended remedies will strengthen harmony.';
+
+    const harmonyDesc = harmonyScore >= 75
+      ? 'Exceptional longevity, vitality, and enduring peacefulness together.'
+      : harmonyScore >= 50
+      ? 'Good long-term balance sustained by mutual care and shared aspirations.'
+      : 'Nodal and energetic sensitivities suggest astrological remedial attention.';
 
     return {
       person1: {
@@ -1480,36 +1644,38 @@ class AstrologyService {
         verdict: gunasObtained >= 25 ? 'High Match' : gunasObtained >= 18 ? 'Moderate Match' : 'Low Match',
         verdictDescription: gunasObtained >= 25
           ? 'Strong natural harmony and shared emotional values indicate high matrimonial potential.'
-          : 'Favorable alignment with some minor differences requiring patience and mutual understanding.',
+          : gunasObtained >= 18
+          ? 'Favorable alignment with some minor differences requiring patience and mutual understanding.'
+          : 'Low natural alignment. Traditional remedial measures and deeper compatibility consultation advised.',
       },
       highlights: [
         {
           id: 'emotional',
           title: 'Emotional Connection',
-          score: '90%',
+          score: `${emotionalScore}%`,
           icon: 'ruby_heart',
-          description: 'Strong emotional understanding and support.',
+          description: emotionalDesc,
         },
         {
           id: 'values',
           title: 'Values & Beliefs',
-          score: '78%',
+          score: `${valuesScore}%`,
           icon: 'leaf',
-          description: 'Similar views on family, traditions and life goals.',
+          description: valuesDesc,
         },
         {
           id: 'marriage',
           title: 'Marriage Prospects',
-          score: '76%',
+          score: `${marriageScore}%`,
           icon: 'match_rings',
-          description: 'Favorable indications for a stable and harmonious marriage.',
+          description: marriageDesc,
         },
         {
           id: 'harmony',
           title: 'Long-term Harmony',
-          score: '84%',
+          score: `${harmonyScore}%`,
           icon: 'lotus_gold',
-          description: 'Positive indications for a peaceful and fulfilling future.',
+          description: harmonyDesc,
         },
       ],
       manglikAnalysis: {
@@ -1524,74 +1690,74 @@ class AstrologyService {
         {
           id: 'emotional',
           title: 'Emotional Connection',
-          score: '90%',
+          score: `${emotionalScore}%`,
           iconType: 'ruby_heart',
-          description: 'Strong emotional understanding and support between both individuals.',
-          details: 'The moon and water elements harmonize exceptionally well, creating intuitive empathy and emotional resilience in the relationship.',
+          description: emotionalDesc,
+          details: `Bhakoot score of ${bhakootPoints}/7 and Moon planetary rapport reflect ${emotionalScore >= 70 ? 'intuitive empathy and mutual resilience' : 'differing emotional needs requiring conscious care'}.`,
         },
         {
           id: 'mental',
           title: 'Mental Compatibility',
-          score: '76%',
+          score: `${mentalScore}%`,
           iconType: 'lotus_gold',
-          description: 'Good alignment in thinking, communication and approach to life.',
-          details: 'Mercury positions encourage open intellectual discussions, joint problem solving, and mutual respect for individual perspectives.',
+          description: mentalScore >= 70 ? 'Good alignment in thinking, communication and problem solving.' : 'Contrasting mental approaches requiring structured dialogue.',
+          details: `Graha Maitri between Moon sign lords ${gSign.lord} and ${bSign.lord} yields ${maitriPoints}/5 points.`,
         },
         {
           id: 'values',
           title: 'Values & Beliefs',
-          score: '78%',
+          score: `${valuesScore}%`,
           iconType: 'sun_face',
-          description: 'Similar views on family, traditions and important life values.',
-          details: 'Shared spiritual orientation, family cultural heritage, and harmonious ethical outlook facilitate long-term familial peace.',
+          description: valuesDesc,
+          details: `Varna score (${varnaPoints}/1) and Gana harmony (${gAv.gana} & ${bAv.gana}, ${ganaPoints}/6) indicate cultural alignment.`,
         },
         {
           id: 'marriage',
           title: 'Marriage Prospects',
-          score: '76%',
+          score: `${marriageScore}%`,
           iconType: 'match_rings',
-          description: 'Favorable indications for a stable and harmonious marriage.',
-          details: '7th house and Venus placements predict enduring commitment, reciprocal loyalty, and auspicious matrimonial milestones.',
+          description: marriageDesc,
+          details: `Overall score of ${gunasObtained}/36 gunas (${percentage}) provides a ${gunasObtained >= 25 ? 'solid and blessed' : 'growth-oriented'} foundation for marriage.`,
         },
         {
           id: 'financial',
           title: 'Financial Harmony',
-          score: '72%',
+          score: `${financialScore}%`,
           iconType: 'leaf',
-          description: 'Complementary approach towards finances and material stability.',
-          details: 'Balanced wealth accumulation, prudent expenditure management, and collaborative financial aspirations.',
+          description: financialScore >= 70 ? 'Complementary approach towards finances and material stability.' : 'Varying attitudes toward expenditure and long-term savings.',
+          details: `Bhakoot placement and Vashya score (${vashyaPoints}/2) govern material collaboration.`,
         },
         {
           id: 'physical',
           title: 'Physical Compatibility',
-          score: '80%',
+          score: `${physicalScore}%`,
           iconType: 'moon_crescent',
-          description: 'Strong physical attraction and comfort with each other.',
-          details: 'Yoni Koota affinity indicates strong magnetic attraction, reciprocal comfort, and vibrant intimacy.',
+          description: physicalScore >= 70 ? 'Strong physical chemistry and intuitive reciprocal comfort.' : 'Moderate physical affinity; mutual affection bridges differences.',
+          details: `Yoni Koota affinity between ${gAv.yoni} and ${bAv.yoni} scores ${yoniPoints}/4 points.`,
         },
         {
           id: 'harmony',
           title: 'Long-term Harmony',
-          score: '84%',
+          score: `${harmonyScore}%`,
           iconType: 'star_sparkle',
-          description: 'Positive indications for a peaceful and fulfilling future together.',
-          details: 'Jupiter and 9th house blessings bestow enduring grace, mutual growth, and profound lifelong fulfillment.',
+          description: harmonyDesc,
+          details: `Nadi score of ${nadiPoints}/8 (${gAv.nadi} & ${bAv.nadi}) alongside Tara score of ${taraPoints}/3 points assures long-term vitality.`,
         },
       ],
       ashtakootaGunas: [
-        { koota: 'Varna', maxPoints: 1, obtained: varnaPoints, description: 'Spiritual compatibility' },
-        { koota: 'Vashya', maxPoints: 2, obtained: vashyaPoints, description: 'Mutual attraction and influence' },
-        { koota: 'Tara', maxPoints: 3, obtained: taraPoints, description: 'Destiny and health compatibility' },
-        { koota: 'Yoni', maxPoints: 4, obtained: yoniPoints, description: 'Biological and physical compatibility' },
+        { koota: 'Varna', maxPoints: 1, obtained: varnaPoints, description: 'Spiritual compatibility and ego harmony' },
+        { koota: 'Vashya', maxPoints: 2, obtained: vashyaPoints, description: 'Mutual attraction and natural influence' },
+        { koota: 'Tara', maxPoints: 3, obtained: taraPoints, description: 'Destiny, health, and well-being' },
+        { koota: 'Yoni', maxPoints: 4, obtained: yoniPoints, description: 'Biological affinity and physical compatibility' },
         { koota: 'Graha Maitri', maxPoints: 5, obtained: maitriPoints, description: 'Psychological rapport and planetary friendship' },
-        { koota: 'Gana', maxPoints: 6, obtained: ganaPoints, description: 'Temperamental harmony' },
-        { koota: 'Bhakoot', maxPoints: 7, obtained: bhakootPoints, description: 'Emotional flow and wealth' },
-        { koota: 'Nadi', maxPoints: 8, obtained: nadiPoints, description: 'Genetic compatibility and health of progeny' },
+        { koota: 'Gana', maxPoints: 6, obtained: ganaPoints, description: 'Temperament and behavioral compatibility' },
+        { koota: 'Bhakoot', maxPoints: 7, obtained: bhakootPoints, description: 'Emotional flow, family prosperity and joy' },
+        { koota: 'Nadi', maxPoints: 8, obtained: nadiPoints, description: 'Genetic compatibility, life energy and progeny' },
       ],
       overallRecommendation: {
         title: 'Overall Recommendation',
-        verdict: gunasObtained >= 25 ? 'Highly Auspicious Match' : 'Favorable Match with Remedies',
-        summary: `This union demonstrates great balance across emotional, spiritual, and physical domains with ${gunasObtained} out of 36 Gunas matched.`,
+        verdict: gunasObtained >= 25 ? 'Highly Auspicious Match' : gunasObtained >= 18 ? 'Favorable Match with Remedies' : 'Challenging Match (Consult Astrologer)',
+        summary: `This union demonstrates a ${percentage} match (${gunasObtained} out of 36 Gunas). ${gunasObtained >= 25 ? 'Strong natural alignment and shared vitality indicate high matrimonial bliss.' : gunasObtained >= 18 ? 'Favorable alignment with positive potential; patience and traditional remedies recommended.' : 'Noticeable astrological friction present. Comprehensive matching by a senior astrologer is advised.'}`,
       },
     };
   }

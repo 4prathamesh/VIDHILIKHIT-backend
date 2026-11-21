@@ -82,6 +82,9 @@ class ProfileDao {
   async createProfile(userId, data) {
     const publicId = data.publicId || this.generatePublicId();
     const isActive = data.isActive ? 1 : 0;
+    const formattedDob = typeof data.dob === 'string'
+      ? data.dob.slice(0, 10)
+      : (data.dob instanceof Date ? data.dob.toISOString().slice(0, 10) : (data.dob || '1995-03-15'));
 
     await withTransaction(async (conn) => {
       if (isActive) {
@@ -99,7 +102,7 @@ class ProfileDao {
           data.name,
           data.relationship || 'self',
           data.gender || 'male',
-          data.dob,
+          formattedDob,
           data.tob,
           data.tobChoice || 'exact',
           data.pob,
@@ -152,7 +155,10 @@ class ProfileDao {
 
     const name = data.name !== undefined ? data.name : existing.name;
     const gender = data.gender !== undefined ? data.gender : existing.gender;
-    const dob = data.dob !== undefined ? data.dob : existing.dob;
+    const rawDob = data.dob !== undefined ? data.dob : existing.dob;
+    const dob = typeof rawDob === 'string'
+      ? rawDob.slice(0, 10)
+      : (rawDob instanceof Date ? rawDob.toISOString().slice(0, 10) : rawDob);
     const tob = data.tob !== undefined ? data.tob : existing.tob;
     const tobChoice = data.tobChoice !== undefined ? data.tobChoice : existing.tobChoice;
     const pob = data.pob !== undefined ? data.pob : existing.pob;
