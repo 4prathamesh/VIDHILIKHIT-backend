@@ -7,6 +7,7 @@ const kundaliRoutes = require('./kundali.routes');
 const matchmakingRoutes = require('./matchmaking.routes');
 const guidanceRoutes = require('./guidance.routes');
 const reportRoutes = require('./report.routes');
+const numerologyRoutes = require('./numerology.routes');
 const locationRoutes = require('./location.routes');
 const userRoutes = require('./user.routes');
 const authenticate = require('../middlewares/auth.middleware');
@@ -32,6 +33,7 @@ router.use('/kundali', kundaliRoutes);
 router.use('/matchmaking', matchmakingRoutes);
 router.use('/guidance', guidanceRoutes);
 router.use('/reports', reportRoutes);
+router.use('/numerology', numerologyRoutes);
 // AI Bot Context API closed by configuration (disabled unless ENABLE_AI_BOT=true)
 if (process.env.ENABLE_AI_BOT === 'true') {
   const botRoutes = require('./bot.routes');

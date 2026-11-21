@@ -33,6 +33,7 @@ app.use((req, res, next) => {
       req.url.startsWith('/matchmaking') ||
       req.url.startsWith('/guidance') ||
       req.url.startsWith('/reports') ||
+      req.url.startsWith('/numerology') ||
       req.url.startsWith('/bot') ||
       req.url.startsWith('/locations') ||
       req.url.startsWith('/users'))
