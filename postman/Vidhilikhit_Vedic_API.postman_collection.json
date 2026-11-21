@@ -21,6 +21,26 @@
       "item": [
         {
           "name": "1.1 Register User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "    var res = pm.response.json();",
+                  "    if (res.data && res.data.tokens && res.data.tokens.accessToken) {",
+                  "        pm.environment.set(\"token\", res.data.tokens.accessToken);",
+                  "        console.log(\"Token stored successfully:\", res.data.tokens.accessToken);",
+                  "    }",
+                  "    if (res.data && res.data.user && res.data.user.activeProfileId) {",
+                  "        pm.environment.set(\"profileId\", res.data.user.activeProfileId);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
           "request": {
             "auth": {
               "type": "noauth"
@@ -34,7 +54,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"fullName\": \"Aarav Mehta\",\n  \"email\": \"aarav.mehta@example.com\",\n  \"password\": \"Password@123\",\n  \"gender\": \"male\",\n  \"dob\": \"1995-03-15\",\n  \"tob\": \"10:30\",\n  \"tobChoice\": \"exact\",\n  \"pob\": \"Mumbai, Maharashtra, India\",\n  \"latitude\": 19.076,\n  \"longitude\": 72.8777,\n  \"timeZone\": \"Asia/Kolkata\"\n}"
+              "raw": "{\n  \"fullName\": \"Aarav Mehta\",\n  \"email\": \"aarav_{{$timestamp}}@example.com\",\n  \"password\": \"Password@123\",\n  \"gender\": \"male\",\n  \"dob\": \"1995-03-15\",\n  \"tob\": \"10:30\",\n  \"tobChoice\": \"exact\",\n  \"pob\": \"Mumbai, Maharashtra, India\",\n  \"latitude\": 19.076,\n  \"longitude\": 72.8777,\n  \"timeZone\": \"Asia/Kolkata\",\n  \"termsAccepted\": true\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/auth/register",
@@ -46,7 +66,7 @@
                 "register"
               ]
             },
-            "description": "Registers a new user and provisions their active root birth profile."
+            "description": "Registers a new user with terms accepted, creates active profile, and auto-saves token/profileId in Postman environment."
           }
         },
         {
@@ -534,6 +554,160 @@
             },
             "description": "Returns a standalone North Indian 12-house SVG vector diagram with exact zodiac sign numbers in each house cell and astrological planet symbols."
           }
+        },
+        {
+          "name": "4.8 Strengths (Shadbala & Bhavbala)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/kundali/strengths?profileId={{profileId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "kundali",
+                "strengths"
+              ],
+              "query": [
+                {
+                  "key": "profileId",
+                  "value": "{{profileId}}"
+                }
+              ]
+            },
+            "description": "Returns 6-fold Shadbala virupas (Sthaana, Kaala, Diga, Cheshta, Naisargika, Drik), total virupas, rupas, required rupas, ratio, rank, and ishtaPhala for 7 planets, plus 12-house Bhavbala."
+          }
+        },
+        {
+          "name": "4.9 Transits (Lagna & Moon Transits)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/kundali/transits?profileId={{profileId}}&asOf=2026-11-16",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "kundali",
+                "transits"
+              ],
+              "query": [
+                {
+                  "key": "profileId",
+                  "value": "{{profileId}}"
+                },
+                {
+                  "key": "asOf",
+                  "value": "2026-11-16",
+                  "description": "Target date for transits (YYYY-MM-DD)"
+                }
+              ]
+            },
+            "description": "Returns real-time Gochar transit charts from both Lagna and Moon with SVG chart URLs, house placements, signs, and retrograde statuses."
+          }
+        },
+        {
+          "name": "4.10 KP Astrology (Bhav Chalit, Sub-Lords & Ruling Planets)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/kundali/kp?profileId={{profileId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "kundali",
+                "kp"
+              ],
+              "query": [
+                {
+                  "key": "profileId",
+                  "value": "{{profileId}}"
+                }
+              ]
+            },
+            "description": "Returns Krishnamurti Paddhati (KP) Bhav Chalit chart, Ruling Planets, KP Grahas with Star Lords and Sub-Lords, and 12 KP Cusps."
+          }
+        },
+        {
+          "name": "4.11 Ashtakavarga (Sarvashtakavarga & Bhinna Ashtakavarga)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/kundali/ashtakavarga?profileId={{profileId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "kundali",
+                "ashtakavarga"
+              ],
+              "query": [
+                {
+                  "key": "profileId",
+                  "value": "{{profileId}}"
+                }
+              ]
+            },
+            "description": "Returns Sarvashtakavarga (SAV, summing to 337 bindus) and Bhinna Ashtakavarga (BAV) for the 7 classical planets across all 12 signs."
+          }
+        },
+        {
+          "name": "4.12 Doshas (Manglik, Kalsarpa & Sade Sati)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/kundali/doshas?profileId={{profileId}}&asOf=2026-11-16",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "kundali",
+                "doshas"
+              ],
+              "query": [
+                {
+                  "key": "profileId",
+                  "value": "{{profileId}}"
+                },
+                {
+                  "key": "asOf",
+                  "value": "2026-11-16",
+                  "description": "Target evaluation date"
+                }
+              ]
+            },
+            "description": "Evaluates Manglik Dosha checked from Lagna, Moon, and Venus; Kalsarpa Dosha along Rahu-Ketu axis; and active Sade Sati phase and timeline against natal Moon."
+          }
+        },
+        {
+          "name": "4.13 Recommendations (Rudraksha & Vedic Gemstones)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/kundali/recommendations?profileId={{profileId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "kundali",
+                "recommendations"
+              ],
+              "query": [
+                {
+                  "key": "profileId",
+                  "value": "{{profileId}}"
+                }
+              ]
+            },
+            "description": "Provides Mukhi Rudraksha (1-9 Mukhi, ruling planet, deity, mantra, how to wear) and Gemstone recommendations (Life Stone, Lucky Stone, Fortune Stone with metals and mantras)."
+          }
         }
       ]
     },
@@ -894,6 +1068,108 @@
               ]
             },
             "description": "Searches cities/locations and returns latitude, longitude, timezone (IANA), and GMT offset."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Flow 10: Full Kundali PDF Reports",
+      "item": [
+        {
+          "name": "10.1 Generate Full Kundali PDF Report (202 Accepted)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 202 || pm.response.code === 200) {",
+                  "    var res = pm.response.json();",
+                  "    if (res.data && res.data.reportId) {",
+                  "        pm.environment.set(\"reportId\", res.data.reportId);",
+                  "        console.log(\"Report ID stored successfully:\", res.data.reportId);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"profileId\": \"{{profileId}}\",\n  \"chartStyle\": \"north_indian\",\n  \"language\": \"en\",\n  \"format\": \"pdf\",\n  \"asOfDate\": \"2026-11-16\",\n  \"includeSections\": [\n    \"basic_details\",\n    \"panchang\",\n    \"avakhada\",\n    \"birth_charts\",\n    \"planetary_positions\",\n    \"vimshottari_dasha\",\n    \"transit_charts\",\n    \"shadbala_bhavbala\",\n    \"kp_astrology\",\n    \"ashtakavarga\",\n    \"divisional_charts\",\n    \"yoga_combinations\",\n    \"rudraksha\",\n    \"gemstones\",\n    \"dosha_analysis\"\n  ],\n  \"options\": {\n    \"includeOuterPlanets\": true,\n    \"includeInterpretations\": true,\n    \"includeCharts\": true\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/kundali/report/generate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "kundali",
+                "report",
+                "generate"
+              ]
+            },
+            "description": "Initiates asynchronous 55-page comprehensive Vedic horoscope PDF generation workflow returning 202 Accepted, reportId, and statusUrl."
+          }
+        },
+        {
+          "name": "10.2 Get Report Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/kundali/report/{{reportId}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "kundali",
+                "report",
+                "{{reportId}}",
+                "status"
+              ]
+            },
+            "description": "Polls status of report generation; returns COMPLETED with progress: 100, downloadUrl, pageCount (55), and expiresAt."
+          }
+        },
+        {
+          "name": "10.3 List Report History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/kundali/reports?profileId={{profileId}}&page=1&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "kundali",
+                "reports"
+              ],
+              "query": [
+                {
+                  "key": "profileId",
+                  "value": "{{profileId}}"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Lists paginated history of generated reports for the specified profile."
           }
         }
       ]

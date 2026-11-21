@@ -29,8 +29,13 @@ class AuthService {
       birthDetails = {},
     } = data;
 
-    // Strict check if termsAccepted is explicitly passed as false or required by legacy
-    if (termsAccepted === false || (termsAccepted === undefined && mobileNumber)) {
+    const effectiveFullName = fullName || data.name || 'User';
+    const effectiveMobile = mobileNumber || data.phone || data.mobile || null;
+    const effectiveTimeZone = timeZone || data.timezone || 'Asia/Kolkata';
+    const effectiveTermsAccepted = termsAccepted !== undefined ? termsAccepted : data.terms_accepted;
+
+    // Check if termsAccepted is explicitly rejected
+    if (effectiveTermsAccepted === false) {
       const err = new Error('Account creation rejected: Terms and conditions must be accepted.');
       err.statusCode = 400;
       throw err;
@@ -55,13 +60,13 @@ class AuthService {
     const effectivePob = birthDetails.pob || pob;
 
     const userPayload = {
-      fullName,
+      fullName: effectiveFullName,
       email,
-      mobileNumber: mobileNumber || null,
+      mobileNumber: effectiveMobile,
       passwordHash,
       gender: effectiveGender,
       avatarUrl: `https://cdn.vidhilikhit.com/avatars/${gender === 'female' ? 'default_female.jpg' : 'default_male.jpg'}`,
-      termsAccepted: termsAccepted !== false,
+      termsAccepted: effectiveTermsAccepted !== false,
       authProvider: 'local',
       providerId: null,
     };
@@ -74,7 +79,7 @@ class AuthService {
       pob: effectivePob,
       latitude: parseFloat(latitude) || 19.0760,
       longitude: parseFloat(longitude) || 72.8777,
-      timeZone: timeZone || 'Asia/Kolkata',
+      timeZone: effectiveTimeZone,
     };
 
     const userId = await userDao.createUserWithProfile(userPayload, profilePayload);
@@ -87,6 +92,9 @@ class AuthService {
     });
 
     const isNotSure = effectiveTobChoice === 'not_sure';
+    const formattedDob = typeof userProfile.dob === 'string'
+      ? userProfile.dob.slice(0, 10)
+      : (userProfile.dob ? new Date(userProfile.dob).toISOString().slice(0, 10) : effectiveDob);
 
     return {
       user: {
@@ -99,7 +107,7 @@ class AuthService {
         termsAccepted: Boolean(userProfile.termsAccepted),
         authProvider: userProfile.authProvider || 'local',
         birthDetails: {
-          dob: userProfile.dob,
+          dob: formattedDob,
           tob: isNotSure ? null : userProfile.tob,
           tobTime: isNotSure ? null : userProfile.tob,
           tobChoice: userProfile.tobChoice,
@@ -107,7 +115,7 @@ class AuthService {
           pob: userProfile.pob,
           latitude: Number(userProfile.latitude),
           longitude: Number(userProfile.longitude),
-          timeZone: userProfile.timeZone,
+          timeZone: userProfile.timeZone || effectiveTimeZone,
         },
         activeProfileId: userProfile.activeProfileId,
       },

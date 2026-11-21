@@ -1,6 +1,7 @@
 // Assumption: KundaliController resolves profileId from query params, defaulting to user's active profile.
 const profileDao = require('../daos/profile.dao');
 const astrologyService = require('../services/astrology.service');
+const advancedKundaliService = require('../services/advancedKundali.service');
 const { success, error } = require('../utils/response');
 
 class KundaliController {
@@ -8,21 +9,22 @@ class KundaliController {
    * Helper to resolve requested profile or user's active profile.
    */
   async resolveProfile(req) {
-    const userId = req.user.userId;
-    const { profileId } = req.query;
+    const userId = req.user?.userId;
+    const profileId = req.query?.profileId || req.body?.profileId;
 
     if (profileId) {
       const p = await profileDao.getProfileByPublicId(profileId, userId);
       if (p) return p;
     }
 
-    const active = await profileDao.getActiveProfile(userId);
-    if (!active) {
-      const err = new Error('No birth profile found for calculations.');
-      err.statusCode = 404;
-      throw err;
+    if (userId) {
+      const active = await profileDao.getActiveProfile(userId);
+      if (active) return active;
     }
-    return active;
+
+    const err = new Error('No birth profile found for calculations.');
+    err.statusCode = 404;
+    throw err;
   }
 
   async getOverview(req, res, next) {
@@ -199,6 +201,163 @@ class KundaliController {
       const svg = astrologyService.renderChartSvg(houses, ascSignIdx + 1, chartStyle);
       res.setHeader('Content-Type', 'image/svg+xml');
       return res.send(svg);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async getStrengths(req, res, next) {
+    try {
+      const profile = await this.resolveProfile(req);
+      const nodeCalculationMode = (req.query.nodeCalculationMode || req.query.nodeMode || 'MEAN').toUpperCase();
+      const { chart } = await astrologyService.calculateRawChart(
+        profile.dob,
+        profile.tob,
+        profile.latitude,
+        profile.longitude,
+        { nodeCalculationMode }
+      );
+      const grahas = astrologyService.extractGrahas(chart, { nodeCalculationMode });
+      const strengths = advancedKundaliService.calculateStrengths(chart, grahas);
+      return success(res, strengths, 'Strengths (Shadbala & Bhavbala) fetched successfully', 200);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async getTransits(req, res, next) {
+    try {
+      const profile = await this.resolveProfile(req);
+      const nodeCalculationMode = (req.query.nodeCalculationMode || req.query.nodeMode || 'MEAN').toUpperCase();
+      const { chart } = await astrologyService.calculateRawChart(
+        profile.dob,
+        profile.tob,
+        profile.latitude,
+        profile.longitude,
+        { nodeCalculationMode }
+      );
+      const grahas = astrologyService.extractGrahas(chart, { nodeCalculationMode });
+      const asOfDate = req.query.asOf || req.query.asOfDate;
+      const hostUrl = `${req.protocol}://${req.get('host')}`;
+      const transits = await advancedKundaliService.calculateTransits(
+        chart,
+        grahas,
+        asOfDate,
+        hostUrl,
+        profile.publicId,
+        astrologyService
+      );
+      return success(res, transits, 'Transit charts fetched successfully', 200);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async getKp(req, res, next) {
+    try {
+      const profile = await this.resolveProfile(req);
+      const nodeCalculationMode = (req.query.nodeCalculationMode || req.query.nodeMode || 'MEAN').toUpperCase();
+      const { chart } = await astrologyService.calculateRawChart(
+        profile.dob,
+        profile.tob,
+        profile.latitude,
+        profile.longitude,
+        { nodeCalculationMode }
+      );
+      const grahas = astrologyService.extractGrahas(chart, { nodeCalculationMode });
+      const hostUrl = `${req.protocol}://${req.get('host')}`;
+      const kp = await advancedKundaliService.calculateKP(chart, grahas, hostUrl, profile.publicId);
+      return success(res, kp, 'KP Astrology calculations fetched successfully', 200);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async getAshtakavarga(req, res, next) {
+    try {
+      const profile = await this.resolveProfile(req);
+      const nodeCalculationMode = (req.query.nodeCalculationMode || req.query.nodeMode || 'MEAN').toUpperCase();
+      const { chart } = await astrologyService.calculateRawChart(
+        profile.dob,
+        profile.tob,
+        profile.latitude,
+        profile.longitude,
+        { nodeCalculationMode }
+      );
+      const ashtakavarga = await advancedKundaliService.calculateAshtakavarga(chart);
+      return success(res, ashtakavarga, 'Ashtakavarga fetched successfully', 200);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async getDoshas(req, res, next) {
+    try {
+      const profile = await this.resolveProfile(req);
+      const nodeCalculationMode = (req.query.nodeCalculationMode || req.query.nodeMode || 'MEAN').toUpperCase();
+      const { chart } = await astrologyService.calculateRawChart(
+        profile.dob,
+        profile.tob,
+        profile.latitude,
+        profile.longitude,
+        { nodeCalculationMode }
+      );
+      const grahas = astrologyService.extractGrahas(chart, { nodeCalculationMode });
+      const asOfDate = req.query.asOf || req.query.asOfDate;
+      const doshas = advancedKundaliService.calculateDoshas(chart, grahas, asOfDate);
+      return success(res, doshas, 'Doshas evaluated successfully', 200);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async getRecommendations(req, res, next) {
+    try {
+      const profile = await this.resolveProfile(req);
+      const nodeCalculationMode = (req.query.nodeCalculationMode || req.query.nodeMode || 'MEAN').toUpperCase();
+      const { chart } = await astrologyService.calculateRawChart(
+        profile.dob,
+        profile.tob,
+        profile.latitude,
+        profile.longitude,
+        { nodeCalculationMode }
+      );
+      const grahas = astrologyService.extractGrahas(chart, { nodeCalculationMode });
+      const recs = advancedKundaliService.calculateRecommendations(chart, grahas);
+      return success(res, recs, 'Recommendations fetched successfully', 200);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async generateReport(req, res, next) {
+    try {
+      const profile = await this.resolveProfile(req);
+      const result = advancedKundaliService.queueReportGeneration(profile.publicId, req.body);
+      return res.status(202).json({
+        success: true,
+        data: result,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async getReportStatus(req, res, next) {
+    try {
+      const { reportId } = req.params;
+      const result = advancedKundaliService.getReportStatus(reportId);
+      return success(res, result, 'Report status fetched successfully', 200);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  async getReports(req, res, next) {
+    try {
+      const { profileId, page, limit } = req.query;
+      const result = advancedKundaliService.getReportHistory(profileId, page, limit);
+      return success(res, result, 'Report history fetched successfully', 200);
     } catch (err) {
       next(err);
     }

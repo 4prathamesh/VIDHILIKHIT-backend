@@ -105,6 +105,7 @@ class UserDao {
     return await withTransaction(async (conn) => {
       const userPublicId = userData.publicId || this.generatePublicId('usr_');
       const profilePublicId = profileData.publicId || this.generatePublicId('prof_');
+      const formattedDob = formatMySQLDate(profileData.dob);
 
       // Insert User
       const [userResult] = await conn.query(
@@ -139,7 +140,7 @@ class UserDao {
           userData.fullName,
           'self',
           profileData.gender || userData.gender || 'male',
-          profileData.dob || '1995-03-15',
+          formattedDob || '1995-03-15',
           profileData.tob || '10:30:00',
           profileData.tobChoice || 'exact',
           profileData.pob || 'Mumbai, Maharashtra, India',
@@ -157,7 +158,7 @@ class UserDao {
          ON DUPLICATE KEY UPDATE dob = VALUES(dob)`,
         [
           userId,
-          profileData.dob || '1995-03-15',
+          formattedDob || '1995-03-15',
           profileData.tobChoice || 'exact',
           profileData.tobChoice === 'not_sure' ? null : (profileData.tob || '10:30:00'),
           profileData.gender || userData.gender || 'male',
@@ -178,6 +179,8 @@ class UserDao {
         await conn.query(`UPDATE users SET full_name = ? WHERE id = ?`, [userData.fullName, userId]);
       }
 
+      const formattedDob = formatMySQLDate(profileData.dob);
+
       const active = await conn.query('SELECT active_profile_id FROM users WHERE id = ?', [userId]);
       const activeId = active[0]?.[0]?.active_profile_id;
 
@@ -192,9 +195,9 @@ class UserDao {
           fields.push('gender = ?');
           params.push(profileData.gender);
         }
-        if (profileData.dob !== undefined) {
+        if (formattedDob !== undefined) {
           fields.push('dob = ?');
-          params.push(profileData.dob);
+          params.push(formattedDob);
         }
         if (profileData.tobChoice !== undefined) {
           fields.push('tob_choice = ?');
@@ -227,7 +230,7 @@ class UserDao {
                tob_time = ?
            WHERE user_id = ?`,
           [
-            profileData.dob || null,
+            formattedDob || null,
             profileData.gender || null,
             profileData.pob || null,
             profileData.tobChoice || null,
@@ -256,6 +259,32 @@ class UserDao {
       userId,
     ]);
   }
+}
+
+function formatMySQLDate(value) {
+  if (!value) return null;
+
+  if (value instanceof Date) {
+    if (Number.isNaN(value.getTime())) {
+      throw new Error('Invalid date of birth');
+    }
+    return value.toISOString().slice(0, 10);
+  }
+
+  if (typeof value === 'string') {
+    const date = value.trim().slice(0, 10);
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      const parsed = new Date(`${date}T00:00:00.000Z`);
+
+      if (!Number.isNaN(parsed.getTime()) &&
+          parsed.toISOString().slice(0, 10) === date) {
+        return date;
+      }
+    }
+  }
+
+  throw new Error('Invalid date of birth');
 }
 
 module.exports = new UserDao();

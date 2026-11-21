@@ -59,5 +59,68 @@ router.get('/yogas', (req, res, next) => kundaliController.getYogas(req, res, ne
  */
 router.get('/dasha', (req, res, next) => kundaliController.getDasha(req, res, next));
 
+/**
+ * @route   GET /api/v1/kundali/strengths
+ * @desc    Get Shadbala (virupas, rupas, requiredRupas, ratio, rank, ishtaPhala) & Bhavbala
+ * @access  Private
+ */
+router.get('/strengths', (req, res, next) => kundaliController.getStrengths(req, res, next));
+
+/**
+ * @route   GET /api/v1/kundali/transits
+ * @desc    Get Lagna & Moon transit charts and transiting planets
+ * @access  Private
+ */
+router.get('/transits', (req, res, next) => kundaliController.getTransits(req, res, next));
+
+/**
+ * @route   GET /api/v1/kundali/kp
+ * @desc    Get KP Bhav Chalit chart, Ruling Planets, KP Planets with Sub-Lords, KP Cusps
+ * @access  Private
+ */
+router.get('/kp', (req, res, next) => kundaliController.getKp(req, res, next));
+
+/**
+ * @route   GET /api/v1/kundali/ashtakavarga
+ * @desc    Get Sarvashtakavarga (SAV) & Bhinna Ashtakavarga (BAV) for 7 planets
+ * @access  Private
+ */
+router.get('/ashtakavarga', (req, res, next) => kundaliController.getAshtakavarga(req, res, next));
+
+/**
+ * @route   GET /api/v1/kundali/doshas
+ * @desc    Get Manglik, Kalsarpa & Sade Sati analysis
+ * @access  Private
+ */
+router.get('/doshas', (req, res, next) => kundaliController.getDoshas(req, res, next));
+
+/**
+ * @route   GET /api/v1/kundali/recommendations
+ * @desc    Get Mukhi Rudraksha and Life, Lucky, Fortune Gemstones
+ * @access  Private
+ */
+router.get('/recommendations', (req, res, next) => kundaliController.getRecommendations(req, res, next));
+
+/**
+ * @route   POST /api/v1/kundali/report/generate
+ * @desc    Queue 55-page full Kundali PDF generation
+ * @access  Private
+ */
+router.post('/report/generate', (req, res, next) => kundaliController.generateReport(req, res, next));
+
+/**
+ * @route   GET /api/v1/kundali/report/:reportId/status
+ * @desc    Get PDF report generation status
+ * @access  Private
+ */
+router.get('/report/:reportId/status', (req, res, next) => kundaliController.getReportStatus(req, res, next));
+
+/**
+ * @route   GET /api/v1/kundali/reports
+ * @desc    Get paginated PDF reports history
+ * @access  Private
+ */
+router.get('/reports', (req, res, next) => kundaliController.getReports(req, res, next));
+
 module.exports = router;
 
