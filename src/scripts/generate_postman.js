@@ -320,6 +320,20 @@ const collection = {
             description: 'Fetches home dashboard greeting, active Mahadasha, daily horoscope glimpse, panchang snippet, and quick actions.',
           },
         },
+        {
+          name: '3.2 Get Home Dashboard in Marathi (?lang=mr)',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/home/dashboard?lang=mr',
+              host: ['{{baseUrl}}'],
+              path: ['home', 'dashboard'],
+              query: [{ key: 'lang', value: 'mr' }],
+            },
+            description: 'Fetches home dashboard with fully localized Marathi greeting, Kundali card (Rashi, Lagna), Daily Panchang snippet (Tithi, Nakshatra, Abhijit Muhurat), and Vidhilikhit Bot banner in Marathi.',
+          },
+        },
       ],
     },
     {
@@ -1066,6 +1080,298 @@ const collection = {
               path: ['numerology', 'compatibility'],
             },
             description: 'Computes numerological compatibility across the 3 Pillars of Harmony (Emotional, Intellectual, Long-Term Vision) for Screen 10.',
+          },
+        },
+      ],
+    },
+    {
+      name: 'Flow 12: Multilingual Support (12 Indian Languages & i18n)',
+      item: [
+        {
+          name: '12.1 List All Supported Languages',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/i18n/languages',
+              host: ['{{baseUrl}}'],
+              path: ['i18n', 'languages'],
+            },
+            description: 'Returns all 12 supported Indian regional languages (Marathi, Hindi, Gujarati, Bengali, Tamil, Telugu, Kannada, Malayalam, Punjabi, Odia, Assamese, Urdu) plus English with ISO codes, native scripts, app names, and text direction.',
+          },
+        },
+        {
+          name: '12.2 Get Language Dictionary (Marathi - विधिलिखित)',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/i18n/translations?lang=mr',
+              host: ['{{baseUrl}}'],
+              path: ['i18n', 'translations'],
+              query: [{ key: 'lang', value: 'mr' }],
+            },
+            description: 'Returns complete astrological and numerological dictionary for Marathi (Grahas, Rashis, Nakshatras, Bhavas, Ashtakoota, Doshas, Numerology, Archetypes, Gemstones).',
+          },
+        },
+        {
+          name: '12.3 Get Language Dictionary (Hindi - विधिलिखित)',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/i18n/translations?lang=hi',
+              host: ['{{baseUrl}}'],
+              path: ['i18n', 'translations'],
+              query: [{ key: 'lang', value: 'hi' }],
+            },
+            description: 'Returns complete Hindi translation dictionary.',
+          },
+        },
+        {
+          name: '12.4 Get Language Dictionary (Gujarati - વિધિલિખિત)',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/i18n/translations?lang=gu',
+              host: ['{{baseUrl}}'],
+              path: ['i18n', 'translations'],
+              query: [{ key: 'lang', value: 'gu' }],
+            },
+            description: 'Returns complete Gujarati translation dictionary.',
+          },
+        },
+        {
+          name: '12.5 Get Language Dictionary (Tamil - விதிலிகிதம்)',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/i18n/translations?lang=ta',
+              host: ['{{baseUrl}}'],
+              path: ['i18n', 'translations'],
+              query: [{ key: 'lang', value: 'ta' }],
+            },
+            description: 'Returns complete Tamil translation dictionary.',
+          },
+        },
+        {
+          name: '12.6 Get Language Dictionary (Telugu - విధిలిఖితం)',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/i18n/translations?lang=te',
+              host: ['{{baseUrl}}'],
+              path: ['i18n', 'translations'],
+              query: [{ key: 'lang', value: 'te' }],
+            },
+            description: 'Returns complete Telugu translation dictionary.',
+          },
+        },
+        {
+          name: '12.7 Get Language Dictionary (Bengali - বিধিলিখিত)',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/i18n/translations?lang=bn',
+              host: ['{{baseUrl}}'],
+              path: ['i18n', 'translations'],
+              query: [{ key: 'lang', value: 'bn' }],
+            },
+            description: 'Returns complete Bengali translation dictionary.',
+          },
+        },
+        {
+          name: '12.8 Get Language Dictionary (Urdu - مُقَدَّر)',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/i18n/translations?lang=ur',
+              host: ['{{baseUrl}}'],
+              path: ['i18n', 'translations'],
+              query: [{ key: 'lang', value: 'ur' }],
+            },
+            description: 'Returns complete Urdu translation dictionary with RTL direction.',
+          },
+        },
+        {
+          name: '12.9 Numerology Calculation in Marathi (?lang=mr)',
+          request: {
+            method: 'POST',
+            header: [{ key: 'Content-Type', value: 'application/json' }],
+            body: {
+              mode: 'raw',
+              raw: JSON.stringify(
+                {
+                  fullName: 'Arjun Sharma',
+                  dob: '1999-07-29',
+                  targetYear: 2026,
+                  system: 'chaldean',
+                  isTransliterationConfirmed: true,
+                },
+                null,
+                2
+              ),
+            },
+            url: {
+              raw: '{{baseUrl}}/numerology/calculate?lang=mr',
+              host: ['{{baseUrl}}'],
+              path: ['numerology', 'calculate'],
+              query: [{ key: 'lang', value: 'mr' }],
+            },
+            description: 'Calculates complete numerology profile returning localized Marathi messages and terms.',
+          },
+        },
+        {
+          name: '12.10 Kundali Grahas in Hindi (?lang=hi)',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/kundali/grahas?lang=hi',
+              host: ['{{baseUrl}}'],
+              path: ['kundali', 'grahas'],
+              query: [{ key: 'lang', value: 'hi' }],
+            },
+            description: 'Returns 9 planetary positions enriched with localized Hindi planet names, signs, nakshatras, and dignities.',
+          },
+        },
+        {
+          name: '12.11 Matchmaking with Accept-Language Header (Tamil - ta)',
+          request: {
+            method: 'POST',
+            header: [
+              { key: 'Content-Type', value: 'application/json' },
+              { key: 'Accept-Language', value: 'ta' },
+            ],
+            body: {
+              mode: 'raw',
+              raw: JSON.stringify(
+                {
+                  boy: {
+                    name: 'Karthik',
+                    dob: '1995-03-15',
+                    tob: '10:30',
+                    pob: 'Chennai, Tamil Nadu, India',
+                    latitude: 13.0827,
+                    longitude: 80.2707,
+                  },
+                  girl: {
+                    name: 'Deepa',
+                    dob: '1997-08-20',
+                    tob: '14:15',
+                    pob: 'Madurai, Tamil Nadu, India',
+                    latitude: 9.9252,
+                    longitude: 78.1198,
+                  },
+                },
+                null,
+                2
+              ),
+            },
+            url: {
+              raw: '{{baseUrl}}/matchmaking/calculate',
+              host: ['{{baseUrl}}'],
+              path: ['matchmaking', 'calculate'],
+            },
+            description: 'Calculates 36-guna compatibility and Ashtakootas localized in Tamil via HTTP Accept-Language header.',
+          },
+        },
+        {
+          name: '12.12 Matchmaking with Body Language Parameter (Gujarati - gu)',
+          request: {
+            method: 'POST',
+            header: [{ key: 'Content-Type', value: 'application/json' }],
+            body: {
+              mode: 'raw',
+              raw: JSON.stringify(
+                {
+                  boy: {
+                    name: 'Aarav Patel',
+                    dob: '1996-04-12',
+                    tob: '09:00',
+                    latitude: 23.0225,
+                    longitude: 72.5714,
+                  },
+                  girl: {
+                    name: 'Pooja Shah',
+                    dob: '1998-11-25',
+                    tob: '18:45',
+                    latitude: 22.3072,
+                    longitude: 73.1812,
+                  },
+                  language: 'gu',
+                },
+                null,
+                2
+              ),
+            },
+            url: {
+              raw: '{{baseUrl}}/matchmaking/calculate',
+              host: ['{{baseUrl}}'],
+              path: ['matchmaking', 'calculate'],
+            },
+            description: 'Calculates compatibility and returns Gujarati localized response via JSON body parameter "language": "gu".',
+          },
+        },
+        {
+          name: '12.13 Kundali Overview in Marathi (?lang=mr)',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/kundali/overview?lang=mr',
+              host: ['{{baseUrl}}'],
+              path: ['kundali', 'overview'],
+              query: [{ key: 'lang', value: 'mr' }],
+            },
+            description: 'Returns D1 Kundali overview with fully localized Marathi Rashi, Lagna, Nakshatra, and Element details.',
+          },
+        },
+        {
+          name: '12.14 Kundali Doshas in Marathi (?lang=mr)',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/kundali/doshas?lang=mr',
+              host: ['{{baseUrl}}'],
+              path: ['kundali', 'doshas'],
+              query: [{ key: 'lang', value: 'mr' }],
+            },
+            description: 'Evaluates Manglik, Kalsarpa, and Sade Sati doshas with full Marathi descriptions, rule breakdowns, and status.',
+          },
+        },
+        {
+          name: '12.15 Kundali Recommendations in Marathi (?lang=mr)',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/kundali/recommendations?lang=mr',
+              host: ['{{baseUrl}}'],
+              path: ['kundali', 'recommendations'],
+              query: [{ key: 'lang', value: 'mr' }],
+            },
+            description: 'Returns localized Vedic Rudraksha Mukhi recommendations, deities, wearing rules, and gemstone recommendations in Marathi.',
+          },
+        },
+        {
+          name: '12.16 Daily Guidance Forecast in Marathi (?lang=mr)',
+          request: {
+            method: 'GET',
+            header: [],
+            url: {
+              raw: '{{baseUrl}}/guidance/forecast?lang=mr',
+              host: ['{{baseUrl}}'],
+              path: ['guidance', 'forecast'],
+              query: [{ key: 'lang', value: 'mr' }],
+            },
+            description: 'Returns daily astrology forecast, Panchang snippet (Tithi, Nakshatra, Abhijit), career/finance/relationships domains, and affirmations in Marathi.',
           },
         },
       ],
